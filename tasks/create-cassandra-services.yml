@@ -1,0 +1,26 @@
+---
+# (c) 2017 DataNexus Inc.  All Rights Reserved
+
+- name: Create a cassandra PID dir
+  become: yes
+  file:
+    path: /var/run/cassandra
+    state: directory
+    mode: 0755
+    owner: "{{cassandra_username}}"
+    group: "{{cassandra_groupname}}"
+
+- name: Create cassandra service files
+  become: true
+  template:
+    src: cassandra.service.j2
+    dest: /etc/systemd/system/cassandra.service
+    mode: 0644
+
+- name: restart systemctl daemon
+  become: true
+  command: systemctl daemon-reload
+
+- name: Enable cassandra services on boot
+  become: true
+  command: systemctl enable cassandra.service

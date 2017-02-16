@@ -1,0 +1,61 @@
+---
+# (c) 2017 DataNexus Inc.  All Rights Reserved
+
+- name: Download cassandra distribution to /tmp
+  become: true
+  get_url:
+    url: "{{ cassandra_bin_url }}"
+    dest: /tmp
+    mode: 0644
+    validate_certs: no
+  environment: "{{ environment_vars }}"
+
+- name: Create Cassandra home directory {{ cassandra_home_dir }}
+  become: true
+  file:
+    path: "{{ cassandra_home_dir }}"
+    state: directory
+    mode: 0755
+    owner: "{{ cassandra_username }}"
+    group: "{{ cassandra_groupname }}"
+
+- name: Unpack cassandra distribution into {{cassandra_home_dir}}
+  become: true
+  unarchive:
+    copy: no
+    src: "/tmp/{{ cassandra_bin_name }}"
+    dest: "{{ cassandra_home_dir }}"
+    extra_opts: [ --strip-components=1 ]
+    owner: "{{ cassandra_username }}"
+    group: "{{ cassandra_groupname }}"
+
+- name: Create Cassandra data directory {{ cassandra_data_dir }}
+  become: true
+  file:
+    path: "{{ cassandra_data_dir }}"
+    state: directory
+    mode: 0755
+    owner: "{{ cassandra_username }}"
+    group: "{{ cassandra_groupname }}"
+
+- name: Backup configuration files
+  become: true
+  copy: src={{ cassandra_home_dir }}/conf/{{ item }} dest={{ cassandra_home_dir }}/conf/.{{ item }}.bak remote_src=true mode=0644 owner="{{ cassandra_username }}" group="{{ cassandra_groupname }}"
+  with_items:
+    - jvm.options
+    - cassandra.yaml
+    - cassandra-rackdc.properties
+
+- name: Copy new configuration files
+  become: true
+  template: src={{ item }}.j2 dest={{ cassandra_home_dir }}/conf/{{ item }} mode=0644 owner="{{ cassandra_username }}" group="{{ cassandra_groupname }}"
+  with_items:
+    - jvm.options
+    - cassandra.yaml
+    - cassandra-rackdc.properties
+
+- name: Cleanup temporary files
+  become: true
+  file:
+    state: absent
+    path: "/tmp/{{ cassandra_bin_name }}"

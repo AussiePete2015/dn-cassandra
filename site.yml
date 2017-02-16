@@ -1,0 +1,13 @@
+# (c) 2017 DataNexus Inc.  All Rights Reserved
+---
+- name: Install/configure cassandra server
+  hosts: "{{host_inventory}}"
+  vars_files:
+    - vars/cassandra.yml
+  vars:
+    - combined_package_list: "{{ (default_packages|default([])) | union(cassandra_package_list) | union((install_packages_by_tag|default({})).cassandra|default([])) }}"
+  roles:
+    - ensure-interfaces-up
+    - setup-web-proxy
+    - { role: install-packages, package_list: "{{combined_package_list}}" }
+    - dn-cassandra
