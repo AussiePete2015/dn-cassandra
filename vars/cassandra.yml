@@ -1,0 +1,44 @@
+---
+# (c) 2017 DataNexus Inc.  All Rights Reserved
+
+# Variables that are necessary for all deployments of
+# Apache Cassandra
+
+# Defaults that should only be overridden if required
+application: cassandra
+cassandra_home_dir: /opt/apache-cassandra
+cassandra_data_dir: /data
+cassandra_package_list: ["java-1.8.0-openjdk", "java-1.8.0-openjdk-devel"]
+
+cassandra_groupname: cassandra
+cassandra_username: cassandra
+
+cassandra_swap_mode: "off"
+
+cassandra_jvm_heaps_size: 8G
+
+cassandra_number_tokens: 32
+cassandra_authenticator: AllowAllAuthenticator
+cassandra_authorizer: AllowAllAuthorizer
+cassandra_concurrent_reads: 32
+cassandra_concurrent_writes: 32
+cassandra_concurrent_counter_writes: 32
+cassandra_concurrent_materialized_view_writes: 32
+cassandra_memtable_offheap_space_in_mb: 2048
+cassandra_memtable_cleanup_threshold: 0.11
+cassandra_trickle_fsync: true
+cassandra_listen_comms_method: "address: localhost"
+cassandra_start_rpc: false
+cassandra_rpc_comms_method: "address: localhost"
+cassandra_rpc_server_type: sync
+cassandra_rpc_max_threads: 128
+cassandra_compaction_throughput_mb_per_sec: 0
+cassandra_endpoint_snitch: GossipingPropertyFileSnitch
+cassandra_internode_encryption: none
+
+cassandra_jmxremote_enabled: no
+cassandra_jmxremote_protocols: TCP
+cassandra_jmxremote_ciphers: "SSL_RSA_WITH_RC4_128_MD5, SSL_RSA_WITH_RC4_128_SHA,SSL_DHE_RSA_WITH_3DES_EDE_CBC_SHA"
+
+cassandra_keystore_dir: "{{ cassandra_home_dir }}/conf/.keystore"
+cassandra_truststore_dir: "{{ cassandra_home_dir }}/conf/.truststore"
