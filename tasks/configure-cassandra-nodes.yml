@@ -1,0 +1,20 @@
+# (c) 2017 DataNexus Inc.  All Rights Reserved
+---
+# this file is used to configure the last few parameters that are needed
+# to setup a cluster (in those cases where more than one cassandra_node
+# was passed into the playbook)
+- block:
+  - name: When creating a cluster, set RPC/listen addresses and auto_bootstrap value
+    replace:
+      dest: "{{cassandra_dir}}/conf/cassandra.yaml"
+      regexp: "^(.*)(#)?(.*){{item.key}}:.*$"
+      replace: '\g<1> \g<3>{{item.key}}: {{item.value}}'
+    with_dict:
+      cluster_name: "{{cassandra_cluster_name}}"
+      listen_address: "{{iface_addr}}"
+      rpc_address: "{{iface_addr}}"
+      auto_bootstrap: false
+  become: true
+  become_user: "{{cassandra_user}}"
+  when: not (cassandra_cluster_name is undefined or cassandra_cluster_name is none or cassandra_cluster_name | trim == '')
+  

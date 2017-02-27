@@ -35,18 +35,18 @@ optparse = OptionParser.new do |opts|
     options[:cassandra_addr] = cassandra_addr.gsub(/^=/,'')
   end
 
-  options[:cassandra_home_dir] = nil
-  opts.on( '-o', '--home PATH', 'Path where the distribution should be installed' ) do |cassandra_home_dir|
+  options[:cassandra_dir] = nil
+  opts.on( '-o', '--home PATH', 'Path where the distribution should be installed' ) do |cassandra_dir|
     # while parsing, trim an '=' prefix character off the front of the string if it exists
     # (would occur if the value was passed using an option flag like '-h=/opt/apache-cassandra')
-    options[:cassandra_home_dir] = cassandra_home_dir.gsub(/^=/,'')
+    options[:cassandra_dir] = cassandra_dir.gsub(/^=/,'')
   end
 
   options[:cassandra_data_dir] = nil
   opts.on( '-d', '--data PATH', 'Path where Cassandra will store its data' ) do |cassandra_data_dir|
     # while parsing, trim an '=' prefix character off the front of the string if it exists
     # (would occur if the value was passed using an option flag like '-d=/data')
-    options[:cassandra_home_dir] = cassandra_home_dir.gsub(/^=/,'')
+    options[:cassandra_dir] = cassandra_dir.gsub(/^=/,'')
   end
 
   options[:cassandra_url] = nil
@@ -54,20 +54,6 @@ optparse = OptionParser.new do |opts|
     # while parsing, trim an '=' prefix character off the front of the string if it exists
     # (would occur if the value was passed using an option flag like '-u=http://localhost/tmp.tgz')
     options[:cassandra_url] = cassandra_url.gsub(/^=/,'')
-  end
-
-  options[:cassandra_dist_url] = nil
-  opts.on( '-i', '--dist-url URL', 'URL of the distribution site including directory path where the binary can be downloaded from' ) do |cassandra_dist_url|
-    # while parsing, trim an '=' prefix character off the front of the string if it exists
-    # (would occur if the value was passed using an option flag like '-i=http://localhost:8080/dist/path')
-    options[:cassandra_dist_url] = cassandra_dist_url.gsub(/^=/,'')
-  end
-
-  options[:cassandra_bin_name] = nil
-  opts.on( '-b', '--binary-name NAME', 'Name of the binary to download' ) do |cassandra_bin_name|
-    # while parsing, trim an '=' prefix character off the front of the string if it exists
-    # (would occur if the value was passed using an option flag like '-b=apache-cassandra.tar.gz')
-    options[:cassandra_bin_name] = cassandra_bin_name.gsub(/^=/,'')
   end
 
   options[:cassandra_version] = nil
@@ -237,6 +223,9 @@ Vagrant.configure("2") do |config|
 
   config.vm.provision "ansible" do |ansible|
     ansible.playbook = "site.yml"
+    ansible.groups = {
+      cassandra: cassandra_addr_array
+    }
     ansible.extra_vars = {
       proxy_env: {
         http_proxy: proxy,
@@ -245,6 +234,7 @@ Vagrant.configure("2") do |config|
         proxy_password: proxy_password
       },
       host_inventory: cassandra_addr_array,
+      cassandra_iface: "eth1",
       cassandra_jvm_heaps_size: "2G",
       cassandra_swap_mode: "on",
       cassandra_trickle_fsync: false
@@ -253,23 +243,7 @@ Vagrant.configure("2") do |config|
     # if defined, set the 'extra_vars[:cassandra_url]' value to the value that was passed in on
     # the command-line (eg. "https://10.0.2.2/apache-cassandra-3.10-bin.tar.gz")
     if options[:cassandra_url]
-      # Obtain the binary name and pass it in as well so the package can be removed after it is installed
-      host_url, match, bin_name = options[:cassandra_url].rpartition('/')
-      ansible.extra_vars[:cassandra_bin_url] = "#{options[:cassandra_url]}"
-      ansible.extra_vars[:cassandra_bin_name] = "#{bin_name}"
-      options[:cassandra_bin_name] = bin_name
-    end
-
-    # if defined, set the 'extra_vars[:cassandra_dist_url]' value to the value that was passed in on
-    # the command-line (eg. "http://localhost:8080/dist/path/")
-    if options[:cassandra_dist_url]
-      ansible.extra_vars[:cassandra_dist_url] = "#{options[:cassandra_dist_url]}"
-    end
-
-    # if defined, set the 'extra_vars[:cassandra_bin_name]' value to the value that was passed in on
-    # the command-line (eg. "apache-cassandra.tar.gz")
-    if options[:cassandra_bin_name]
-      ansible.extra_vars[:cassandra_bin_name] = "#{options[:cassandra_bin_name]}"
+      ansible.extra_vars[:cassandra_url] = "#{options[:cassandra_url]}"
     end
 
     # if defined, set the 'extra_vars[:cassandra_version]' value to the value that was passed in on
@@ -278,10 +252,10 @@ Vagrant.configure("2") do |config|
       ansible.extra_vars[:cassandra_version] = "#{options[:cassandra_version]}"
     end
 
-    # if defined, set the 'extra_vars[:cassandra_home_dir]' value to the value that was passed in on
+    # if defined, set the 'extra_vars[:cassandra_dir]' value to the value that was passed in on
     # the command-line (eg. "/opt/apache-cassandra")
-    if options[:cassandra_home_dir]
-      ansible.extra_vars[:cassandra_home_dir] = "#{options[:cassandra_home_dir]}"
+    if options[:cassandra_dir]
+      ansible.extra_vars[:cassandra_dir] = "#{options[:cassandra_dir]}"
     end
 
     # if defined, set the 'extra_vars[:cassandra_data_dir]' value to the value that was passed in on

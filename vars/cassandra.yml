@@ -6,12 +6,12 @@
 
 # Defaults that should only be overridden if required
 application: cassandra
-cassandra_home_dir: /opt/apache-cassandra
+cassandra_dir: /opt/apache-cassandra
 cassandra_data_dir: /data
 cassandra_package_list: ["java-1.8.0-openjdk", "java-1.8.0-openjdk-devel"]
 
-cassandra_groupname: cassandra
-cassandra_username: cassandra
+cassandra_group: cassandra
+cassandra_user: cassandra
 
 cassandra_swap_mode: "off"
 
@@ -40,5 +40,8 @@ cassandra_jmxremote_enabled: no
 cassandra_jmxremote_protocols: TCP
 cassandra_jmxremote_ciphers: "SSL_RSA_WITH_RC4_128_MD5, SSL_RSA_WITH_RC4_128_SHA,SSL_DHE_RSA_WITH_3DES_EDE_CBC_SHA"
 
-cassandra_keystore_dir: "{{ cassandra_home_dir }}/conf/.keystore"
-cassandra_truststore_dir: "{{ cassandra_home_dir }}/conf/.truststore"
+cassandra_keystore_dir: "{{ cassandra_dir }}/conf/.keystore"
+cassandra_truststore_dir: "{{ cassandra_dir }}/conf/.truststore"
+
+# path used to access private keys (defaults to the current working directory)
+private_key_path: "."

@@ -1,3 +1,6 @@
 [submodule "common-roles"]
 	path = common-roles
-	url = git@github.com:Datanexus/common-roles.git
+	url = https://github.com/Datanexus/common-roles
+[submodule "common-utils"]
+	path = common-utils
+	url = https://github.com/Datanexus/common-utils
