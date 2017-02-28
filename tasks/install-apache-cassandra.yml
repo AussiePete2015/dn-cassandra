@@ -1,61 +1,78 @@
----
 # (c) 2017 DataNexus Inc.  All Rights Reserved
-
+---
+# set a fact containing the appropriate (private) IP addresses of the cassandra_seed_nodes
+# (if a list of cassandra_seed_nodes was passed in)
+- set_fact:
+    cass_seed_nodes: "{{cassandra_seed_nodes | map('extract', hostvars, [('ansible_' + cassandra_iface), 'ipv4', 'address']) | list}}"
+# download the Cassandra distribution from the input URL
 - name: Download cassandra distribution to /tmp
   become: true
   get_url:
-    url: "{{ cassandra_bin_url }}"
+    url: "{{cassandra_url}}"
     dest: /tmp
     mode: 0644
     validate_certs: no
-  environment: "{{ environment_vars }}"
-
-- name: Create Cassandra home directory {{ cassandra_home_dir }}
+  environment: "{{environment_vars}}"
+- set_fact:
+    cassandra_filename: "{{cassandra_url | basename}}"
+# create the directory Cassandra will be unpacked into
+- name: Create Cassandra home directory {{cassandra_dir}}
   become: true
   file:
-    path: "{{ cassandra_home_dir }}"
+    path: "{{cassandra_dir}}"
     state: directory
     mode: 0755
-    owner: "{{ cassandra_username }}"
-    group: "{{ cassandra_groupname }}"
-
-- name: Unpack cassandra distribution into {{cassandra_home_dir}}
+    owner: "{{cassandra_user}}"
+    group: "{{cassandra_group}}"
+# unpack the distribution file
+- name: Unpack cassandra distribution into {{cassandra_dir}}
   become: true
   unarchive:
     copy: no
-    src: "/tmp/{{ cassandra_bin_name }}"
-    dest: "{{ cassandra_home_dir }}"
+    src: "/tmp/{{cassandra_filename}}"
+    dest: "{{cassandra_dir}}"
     extra_opts: [ --strip-components=1 ]
-    owner: "{{ cassandra_username }}"
-    group: "{{ cassandra_groupname }}"
-
-- name: Create Cassandra data directory {{ cassandra_data_dir }}
+    owner: "{{cassandra_user}}"
+    group: "{{cassandra_group}}"
+# create the data directory
+- name: Create Cassandra data directory {{cassandra_data_dir}}
   become: true
   file:
-    path: "{{ cassandra_data_dir }}"
+    path: "{{cassandra_data_dir}}"
     state: directory
     mode: 0755
-    owner: "{{ cassandra_username }}"
-    group: "{{ cassandra_groupname }}"
-
+    owner: "{{cassandra_user}}"
+    group: "{{cassandra_group}}"
+# backup the default configuration files
 - name: Backup configuration files
   become: true
-  copy: src={{ cassandra_home_dir }}/conf/{{ item }} dest={{ cassandra_home_dir }}/conf/.{{ item }}.bak remote_src=true mode=0644 owner="{{ cassandra_username }}" group="{{ cassandra_groupname }}"
+  copy:
+    src: "{{cassandra_dir}}/conf/{{item}}"
+    dest: "{{cassandra_dir}}/conf/.{{item}}.bak"
+    remote_src: true
+    mode: 0644
+    owner: "{{cassandra_user}}"
+    group: "{{cassandra_group}}"
   with_items:
     - jvm.options
     - cassandra.yaml
     - cassandra-rackdc.properties
-
+# create the new configuration files
 - name: Copy new configuration files
   become: true
-  template: src={{ item }}.j2 dest={{ cassandra_home_dir }}/conf/{{ item }} mode=0644 owner="{{ cassandra_username }}" group="{{ cassandra_groupname }}"
+  template:
+    src: "{{item}}.j2"
+    dest: "{{cassandra_dir}}/conf/{{item}}"
+    mode: 0644
+    owner: "{{cassandra_user}}"
+    group: "{{cassandra_group}}"
   with_items:
     - jvm.options
     - cassandra.yaml
     - cassandra-rackdc.properties
-
+# and cleanup the file that was downloaded
 - name: Cleanup temporary files
   become: true
   file:
     state: absent
-    path: "/tmp/{{ cassandra_bin_name }}"
+    path: "/tmp/{{cassandra_filename}}"
