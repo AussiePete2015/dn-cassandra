@@ -3,7 +3,8 @@
 # set a fact containing the appropriate (private) IP addresses of the cassandra_seed_nodes
 # (if a list of cassandra_seed_nodes was passed in)
 - set_fact:
-    cass_seed_nodes: "{{cassandra_seed_nodes | map('extract', hostvars, [('ansible_' + cassandra_iface), 'ipv4', 'address']) | list}}"
+    cassandra_data_ips: "{{cassandra_seed_nodes | map('extract', hostvars, [('ansible_' + data_iface), 'ipv4', 'address']) | list}}"
+    cassandra_api_ips: "{{cassandra_seed_nodes | map('extract', hostvars, [('ansible_' + api_iface), 'ipv4', 'address']) | list}}"
 # download the Cassandra distribution from the input URL
 - name: Download cassandra distribution to /tmp
   become: true

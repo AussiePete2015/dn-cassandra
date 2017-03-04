@@ -175,9 +175,14 @@ Vagrant.configure("2") do |config|
   # accessing "localhost:8080" will access port 80 on the guest machine.
   # config.vm.network "forwarded_port", guest: 80, host: 8080
 
-  # Create a private network, which allows host-only access to the machine
+  # Create a two private networks, which each allow host-only access to the machine
   # using a specific IP.
-  config.vm.network "private_network", ip: "#{options[:cassandra_addr]}"
+  if options[:cassandra_addr]
+    config.vm.network "private_network", ip: "#{options[:cassandra_addr]}"
+    split_addr = options[:cassandra_addr].split('.')
+    api_addr = (split_addr[0..1] + [(split_addr[2].to_i + 10).to_s] + [split_addr[3]]).join('.')
+    config.vm.network "private_network", ip: api_addr
+  end
 
   # Create a public network, which generally matched to bridged network.
   # Bridged networks make the machine appear as another physical device on
@@ -234,7 +239,10 @@ Vagrant.configure("2") do |config|
         proxy_password: proxy_password
       },
       host_inventory: cassandra_addr_array,
-      cassandra_iface: "eth1",
+      cassandra_seed_nodes: cassandra_addr_array,
+      inventory_type: "static",
+      data_iface: "eth1",
+      api_iface: "eth2",
       cassandra_jvm_heaps_size: "2G",
       cassandra_swap_mode: "on",
       cassandra_trickle_fsync: false

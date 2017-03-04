@@ -158,13 +158,15 @@
       setup:
   roles:
     - role: get-iface-addr
-      iface_name: "{{cassandra_iface}}"
+      iface_name: "{{data_iface}}"
+      as_fact: "data_addr"
+    - role: get-iface-addr
+      iface_name: "{{api_iface}}"
+      as_fact: "api_addr"
     - role: setup-web-proxy
     - role: add-local-repository
-      yum_repository: "{{yum_repo_addr}}"
-      when: yum_repo_addr is defined
+      yum_repository: "{{yum_repo_url}}"
+      when: yum_repo_url is defined
     - role: install-packages
       package_list: "{{combined_package_list}}"
     - role: dn-cassandra
-      cassandra_addr: "{{iface_addr}}"
-
