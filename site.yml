@@ -66,7 +66,7 @@
           project_nodes: "{{(di_output_json | json_query('[\"meta-Project_' + project + '\"]')).0}}"
           domain_nodes: "{{(di_output_json | json_query('[\"meta-Domain_' + domain + '\"]')).0}}"
           application_nodes: "{{(di_output_json | json_query('[\"meta-Application_' + application + '\"]')).0}}"
-          seed_role_nodes: "{{di_output_json | json_query('[\"meta-Role_seed\"]')}}"
+          seed_role_nodes: "{{(di_output_json | json_query('[\"meta-Role_seed\"]')).0}}"
       - set_fact:
           cassandra_nodes: "{{cloud_nodes | intersect(tenant_nodes) | intersect(project_nodes) | intersect(domain_nodes) | intersect(application_nodes) | difference(seed_role_nodes)}}"
           cassandra_seed_nodes: "{{cloud_nodes | intersect(tenant_nodes) | intersect(project_nodes) | intersect(domain_nodes) | intersect(application_nodes) | intersect(seed_role_nodes)}}"
