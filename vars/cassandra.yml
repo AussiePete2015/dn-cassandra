@@ -43,5 +43,15 @@ cassandra_jmxremote_ciphers: "SSL_RSA_WITH_RC4_128_MD5, SSL_RSA_WITH_RC4_128_SHA
 cassandra_keystore_dir: "{{ cassandra_dir }}/conf/.keystore"
 cassandra_truststore_dir: "{{ cassandra_dir }}/conf/.truststore"
 
+# the names of the interfaces to use for the Cassandra servers; the "data"
+# interface is the private interface that is used to communicate with other
+# members of the cluster (and Zookeeper), while the "api" interface is the
+# interface that the database listens on for connections from clients
+api_iface: "eth0"
+data_iface: "eth0"
+
 # path used to access private keys (defaults to the current working directory)
 private_key_path: "."
+
+# a suffix used to create a unique cluster name (if defined)
+# cluster_name_suffix: ""
