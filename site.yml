@@ -1,143 +1,43 @@
 # (c) 2017 DataNexus Inc.  All Rights Reserved
 ---
-# If we're running this command for to build a cluster in an AWS or
-# OpenStack cloud, then use the `ec2` or `openstack` command (depending
-# on the `cloud` we're deploying into) to gather the dynamic inventory
-# information that we need to build our Cassandra host group (and build it)
-- name: Create Cassandra host group from AWS or OpenStack inventory
+# First, build our cassandra and cassandra_seed host groups
+- name: Create cassandra and cassandra_seed host groups
   hosts: "{{host_inventory}}"
   gather_facts: no
   tasks:
-    # run these commands to add the cassandra host group for an aws cloud
-    - block:
-      - name: Run ec2 command to gather inventory information
-        local_action: "shell common-utils/inventory/aws/ec2"
-        register: di_output
-      - set_fact:
-          di_output_json: "{{di_output.stdout | from_json}}"
-      - set_fact:
-          cloud_nodes: "{{di_output_json | json_query('tag_Cloud_' + cloud)}}"
-          tenant_nodes: "{{di_output_json | json_query('tag_Tenant_' + tenant)}}"
-          project_nodes: "{{di_output_json | json_query('tag_Project_' + project)}}"
-          domain_nodes: "{{di_output_json | json_query('tag_Domain_' + domain)}}"
-          application_nodes: "{{di_output_json | json_query('tag_Application_' + application)}}"
-          seed_role_nodes: "{{di_output_json | json_query('tag_Role_seed')}}"
-      - set_fact:
-          cassandra_nodes: "{{cloud_nodes | intersect(tenant_nodes) | intersect(project_nodes) | intersect(domain_nodes) | intersect(application_nodes) | difference(seed_role_nodes)}}"
-          cassandra_seed_nodes: "{{cloud_nodes | intersect(tenant_nodes) | intersect(project_nodes) | intersect(domain_nodes) | intersect(application_nodes) | intersect(seed_role_nodes)}}"
-      - add_host:
-          name: "{{item}}"
-          groups: "cassandra"
-          ansible_ssh_user: "{{ansible_user}}"
-          ansible_ssh_private_key_file: "{{private_key_path}}/{{cloud}}-{{di_output_json | json_query('_meta.hostvars.\"' + item + '\".ec2_key_name')}}-private-key.pem"
-        with_items: "{{cassandra_nodes}}"
-      - add_host:
-          name: "{{item}}"
-          groups: "seednodes"
-          ansible_ssh_user: "{{ansible_user}}"
-          ansible_ssh_private_key_file: "{{private_key_path}}/{{cloud}}-{{di_output_json | json_query('_meta.hostvars.\"' + item + '\".ec2_key_name')}}-private-key.pem"
-        with_items: "{{cassandra_seed_nodes}}"
-      - set_fact:
-          cassandra_nodes: cassandra_seed_nodes
-          seed_nodes_only: true
-        when: (cassandra_nodes | default([])) == []
-      - add_host:
-          name: "{{item}}"
-          groups: "cassandra"
-          ansible_ssh_user: "{{ansible_user}}"
-          ansible_ssh_private_key_file: "{{private_key_path}}/{{cloud}}-{{di_output_json | json_query('_meta.hostvars.\"' + item + '\".ec2_key_name')}}-private-key.pem"
-        with_items: "{{cassandra_seed_nodes}}"
-        when: seed_nodes_only is defined and seed_nodes_only
-      - debug: msg="{{item}}; ansible_ssh_private_key_file => {{private_key_path}}/{{cloud}}-{{di_output_json | json_query('_meta.hostvars.\"' + item + '\".ec2_key_name')}}-private-key.pem"
-        with_items: "{{cassandra_seed_nodes}}"
-        when: seed_nodes_only is defined and seed_nodes_only
-      when: not (inventory_type is undefined or inventory_type == "static") and cloud == "aws"
-      run_once: true
-    # or run these commands to add the cassandra host group for an osp cloud
-    - block:
-      - name: Run openstack command to gather inventory information
-        local_action: "shell common-utils/inventory/osp/openstack"
-        register: di_output
-      - set_fact:
-          di_output_json: "{{di_output.stdout | from_json}}"
-      - set_fact:
-          cloud_nodes: "{{(di_output_json | json_query('[\"meta-Cloud_' + cloud + '\"]')).0}}"
-          tenant_nodes: "{{(di_output_json | json_query('[\"meta-Tenant_' + tenant + '\"]')).0}}"
-          project_nodes: "{{(di_output_json | json_query('[\"meta-Project_' + project + '\"]')).0}}"
-          domain_nodes: "{{(di_output_json | json_query('[\"meta-Domain_' + domain + '\"]')).0}}"
-          application_nodes: "{{(di_output_json | json_query('[\"meta-Application_' + application + '\"]')).0}}"
-          seed_role_nodes: "{{(di_output_json | json_query('[\"meta-Role_seed\"]')).0}}"
-      - set_fact:
-          cassandra_nodes: "{{cloud_nodes | intersect(tenant_nodes) | intersect(project_nodes) | intersect(domain_nodes) | intersect(application_nodes) | difference(seed_role_nodes)}}"
-          cassandra_seed_nodes: "{{cloud_nodes | intersect(tenant_nodes) | intersect(project_nodes) | intersect(domain_nodes) | intersect(application_nodes) | intersect(seed_role_nodes)}}"
-      - add_host:
-          name: "{{item}}"
-          groups: "cassandra"
-          ansible_ssh_user: "{{ansible_user}}"
-          ansible_ssh_private_key_file: "{{private_key_path}}/{{di_output_json | json_query('_meta.hostvars.\"' + item + '\".openstack.key_name')}}.pem"
-        with_items: "{{cassandra_nodes}}"
-      - add_host:
-          name: "{{item}}"
-          groups: "seednodes"
-          ansible_ssh_user: "{{ansible_user}}"
-          ansible_ssh_private_key_file: "{{private_key_path}}/{{di_output_json | json_query('_meta.hostvars.\"' + item + '\".openstack.key_name')}}.pem"
-        with_items: "{{cassandra_seed_nodes}}"
-      - set_fact:
-          cassandra_nodes: cassandra_seed_nodes
-          seed_nodes_only: true
-        when: (cassandra_nodes | default([])) == []
-      - add_host:
-          name: "{{item}}"
-          groups: "cassandra"
-          ansible_ssh_user: "{{ansible_user}}"
-          ansible_ssh_private_key_file: "{{private_key_path}}/{{di_output_json | json_query('_meta.hostvars.\"' + item + '\".openstack.key_name')}}.pem"
-        with_items: "{{cassandra_seed_nodes}}"
-        when: seed_nodes_only is defined and seed_nodes_only
-      - debug: msg="{{item}}; ansible_ssh_private_key_file => {{private_key_path}}/{{di_output_json | json_query('_meta.hostvars.\"' + item + '\".openstack.key_name')}}.pem"
-        with_items: "{{cassandra_seed_nodes}}"
-        when: seed_nodes_only is defined and seed_nodes_only
-      when: not (inventory_type is undefined or inventory_type == "static") and cloud == "osp"
-      run_once: true
+    - include_role:
+        name: build-app-host-groups
+      vars:
+        host_group_list:
+          - { name: cassandra, role: seed, invert_match: true }
+          - { name: cassandra, role: seed }
+      when: cloud == 'aws' or cloud == 'osp'
+    - include_role:
+        name: build-app-host-groups
+      vars:
+        host_group_list:
+          - { name: cassandra, node_list: "{{host_inventory}}" }
+          - { name: cassandra_seed, node_list: "{{cassandra_seed_nodes | default([])}}" }
+      when: cloud == "vagrant"
 
-# Otherwise, build our Cassandra and Cassandra Seed node host groups from the
-# static inventory information that was passed in
-- name: Create Cassandra host group from static host_inventory list
-  hosts: "{{host_inventory}}"
+# Build a cassandra group from the cassandra_seed host group if no non-seed nodes were found
+- name: Build cassandra host group if no non-seed nodes were found
+  hosts: cassandra_seed
   gather_facts: no
   tasks:
-    - block:
-      - set_fact:
-          cassandra_nodes: "{{host_inventory | difference(cassandra_seed_nodes)}}"
-      - set_fact:
-          cassandra_nodes: "{{cassandra_seed_nodes}}"
-          seed_nodes_only: true
-        when: cassandra_nodes == []
-      - add_host:
-          name: "{{item}}"
-          groups: "cassandra"
-        with_items: "{{cassandra_nodes}}"
-      when: inventory_type == "static"
-      run_once: true
+    - add_host:
+        name: "{{item}}"
+        groups: cassandra
+      with_items: "{{groups['cassandra_seed']}}"
+      when: cassandra_nodes == []
 
-- name: Create Cassandra Seed Nodes host group from static host_inventory list
-  hosts: "{{host_inventory}}"
-  gather_facts: no
-  tasks:
-    - block:
-      - add_host:
-          name: "{{item}}"
-          groups: "seednodes"
-        with_items: "{{cassandra_seed_nodes}}"
-      when: inventory_type == "static"
-      run_once: true
-
-# Gather facts for Cassandra Seed Nodes (if a set of non-seed nodes were passed in)
-- name: Gather facts for Cassandra Seed Nodes (if passed in)
-  hosts: seednodes
+# Gather facts for the cassandra seed nodes if a set of non-seed nodes were found
+- name: Gather facts for cassandra seed nodes if there are non-seed nodes
+  hosts: cassandra_seed
   gather_facts: no
   tasks:
     - setup:
-      when: seed_nodes_only is undefined or not (seed_nodes_only)
+      when: not (cassandra_nodes == [])
 
 # Then, deploy Cassandra to the nodes in the cassandra host group that was passed in (if there
 # is more than one node passed in, those nodes will be configured as a single Cassandra cluster)

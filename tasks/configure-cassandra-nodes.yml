@@ -15,11 +15,19 @@
       - { pattern: "^# broadcast_address:", key: "broadcast_address", value: "{{data_addr}}" }
       - { pattern: "^rpc_address:", key: "rpc_address", value: "{{api_addr}}" }
       - { pattern: "^auto_bootstrap:", key: "auto_bootstrap", value: "false" }
-  - name: Set cluster name if a cluster name value was passed in
+  - name: Set cluster name based on tenant and project if those values are defined
     lineinfile:
       dest: "{{cassandra_dir}}/conf/cassandra.yaml"
       regexp: "^cluster_name:"
       line: "cluster_name: {{tenant}}{{project}}{{cluster_name_suffix | default('')}}"
       state: present
+    when: tenant is defined and project is defined
+  - name: Set cluster name if a cluster name value was passed in  cassandra_cluster_name
+    lineinfile:
+      dest: "{{cassandra_dir}}/conf/cassandra.yaml"
+      regexp: "^cluster_name:"
+      line: "cluster_name: {{cassandra_cluster_name}}"
+      state: present
+    when: not (tenant is defined and project is defined) and cassandra_cluster_name is defined
   become: true
   become_user: "{{cassandra_user}}"

@@ -46,7 +46,7 @@ optparse = OptionParser.new do |opts|
   opts.on( '-d', '--data PATH', 'Path where Cassandra will store its data' ) do |cassandra_data_dir|
     # while parsing, trim an '=' prefix character off the front of the string if it exists
     # (would occur if the value was passed using an option flag like '-d=/data')
-    options[:cassandra_dir] = cassandra_dir.gsub(/^=/,'')
+    options[:cassandra_data_dir] = cassandra_data_dir.gsub(/^=/,'')
   end
 
   options[:cassandra_url] = nil
@@ -96,6 +96,18 @@ optparse = OptionParser.new do |opts|
     options[:cassandra_rpc_comms_method] = cassandra_rpc_comms_method.gsub(/^=/,'')
   end
 
+  options[:yum_repo_url] = nil
+  opts.on( '-y', '--yum-url URL', 'Local yum repository URL' ) do |yum_repo_url|
+    # while parsing, trim an '=' prefix character off the front of the string if it exists
+    # (would occur if the value was passed using an option flag like '-y=http://192.168.1.128/centos')
+    options[:yum_repo_url] = yum_repo_url.gsub(/^=/,'')
+  end
+
+  options[:reset_proxy_settings] = false
+  opts.on( '-p', '--clear-proxy-settings', 'Clear existing proxy settings if no proxy is set' ) do |reset_proxy_settings|
+    options[:reset_proxy_settings] = true
+  end
+
   opts.on_tail( '-h', '--help', 'Display this screen' ) do
     print opts
     exit
@@ -129,6 +141,12 @@ end
 if options[:cassandra_url] && !(options[:cassandra_url] =~ URI::regexp)
   print "ERROR; input Cassandra URL '#{options[:cassandra_url]}' is not a valid URL\n"
   exit 3
+end
+
+# if a yum repository address was passed in, check and make sure it's a valid URL
+if options[:yum_repo_url] && !(options[:yum_repo_url] =~ URI::regexp)
+  print "ERROR; input yum repository URL '#{options[:yum_repo_url]}' is not a valid URL\n"
+  exit 6
 end
 
 # All Vagrant configuration is done below. The "2" in Vagrant.configure
@@ -239,8 +257,9 @@ Vagrant.configure("2") do |config|
         proxy_password: proxy_password
       },
       host_inventory: cassandra_addr_array,
-      cassandra_seed_nodes: cassandra_addr_array,
-      inventory_type: "static",
+      reset_proxy_settings: options[:reset_proxy_settings],
+      yum_repo_url: options[:yum_repo_url],
+      cloud: "vagrant",
       data_iface: "eth1",
       api_iface: "eth2",
       cassandra_jvm_heaps_size: "2G",
