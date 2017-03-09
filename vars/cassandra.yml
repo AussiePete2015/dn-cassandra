@@ -53,5 +53,24 @@ data_iface: "eth0"
 # path used to access private keys (defaults to the current working directory)
 private_key_path: "."
 
+# flag that can be set to start the cassandra service when the playbook
+# finishes running (defaulting this to false to starting a potentially
+# misconfigured node or nodes when adding new nodes to an existing cluster)
+start_cassandra: false
+
+# can be used to reset the 'auto_bootstrap' flag when adding new nodes to
+# an existing cluster by setting this flag to true
+auto_bootstrap: false
+
+# a list of "regular" cassandra nodes that should be skipped in the provisioning
+# process (can be used to filter out the existing nodes from the list of nodes
+# returned by the dynamic inventory scripts)
+skip_nodes_list: []
+
+# a regular expression that can be used to identify which of the IP addresses
+# returned by the openstack inventory script is the private network used for
+# provisioning
+osp_private_net_regex: '10\.[0-9]+\.0\.[0-9]+'
+
 # a suffix used to create a unique cluster name (if defined)
 # cluster_name_suffix: ""

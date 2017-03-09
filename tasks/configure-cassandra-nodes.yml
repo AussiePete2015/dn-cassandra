@@ -14,7 +14,7 @@
       - { pattern: "^listen_address:", key: "listen_address", value: "{{data_addr}}" }
       - { pattern: "^# broadcast_address:", key: "broadcast_address", value: "{{data_addr}}" }
       - { pattern: "^rpc_address:", key: "rpc_address", value: "{{api_addr}}" }
-      - { pattern: "^auto_bootstrap:", key: "auto_bootstrap", value: "false" }
+      - { pattern: "^auto_bootstrap:", key: "auto_bootstrap", value: "{{(auto_bootstrap | default(false)) | lower}}" }
   - name: Set cluster name based on tenant and project if those values are defined
     lineinfile:
       dest: "{{cassandra_dir}}/conf/cassandra.yaml"
