@@ -67,10 +67,5 @@ auto_bootstrap: false
 # returned by the dynamic inventory scripts)
 skip_nodes_list: []
 
-# a regular expression that can be used to identify which of the IP addresses
-# returned by the openstack inventory script is the private network used for
-# provisioning
-osp_private_net_regex: '10\.[0-9]+\.0\.[0-9]+'
-
 # a suffix used to create a unique cluster name (if defined)
 # cluster_name_suffix: ""
