@@ -63,6 +63,7 @@
         name: network
         state: restarted
       become: true
+      when: not (skip_network_restart is defined or skip_network_restart)
     - name: Gather facts from the Cassandra node(s)
       setup:
   roles:
