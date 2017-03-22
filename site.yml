@@ -66,6 +66,28 @@
       when: not (skip_network_restart is defined or skip_network_restart)
     - name: Gather facts from the Cassandra node(s)
       setup:
+    # next, we obtain the interface names for our data_iface
+    # and api_iface (provided an interface description was provided for each)
+    - include_role:
+        name: get-iface-names
+      vars:
+        iface_descriptions: "{{iface_description_array}}"
+      when: not (iface_description_array is undefined or iface_description_array == [])
+    # if we're provisioning a RHEL machine, then we need to ensure that
+    # it's subscribed before we can install anything (if it hasn't been
+    # registered already, of course, if that's the case then we can skip
+    # this step)
+    - block:
+      - redhat_subscription:
+          state: present
+          username: "{{rhel_username}}"
+          password: "{{rhel_password}}"
+          consumer_id: "{{rhel_consumer_id}}"
+        become: true
+        when: rhel_username is defined and rhel_password is defined and rhel_consumer_id is defined
+      when: ansible_distribution == 'RedHat'
+  # Now that we have all of the facts we need, we can run the roles that are used to
+  # deploy and configure Cassandra
   roles:
     - role: get-iface-addr
       iface_name: "{{data_iface}}"
