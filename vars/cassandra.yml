@@ -25,7 +25,6 @@ cassandra_concurrent_writes: 32
 cassandra_concurrent_counter_writes: 32
 cassandra_concurrent_materialized_view_writes: 32
 cassandra_memtable_offheap_space_in_mb: 2048
-cassandra_memtable_cleanup_threshold: 0.11
 cassandra_trickle_fsync: true
 cassandra_listen_comms_method: "address: localhost"
 cassandra_start_rpc: false
