@@ -4,7 +4,9 @@
 # (if a list of cassandra_seed_nodes was passed in)
 - set_fact:
     cassandra_data_ips: "{{(cassandra_seed_nodes | default([])) | map('extract', hostvars, [('ansible_' + data_iface), 'ipv4', 'address']) | list}}"
-    cassandra_api_ips: "{{(cassandra_seed_nodes | default([])) | map('extract', hostvars, [('ansible_' + api_iface), 'ipv4', 'address']) | list}}"
+  when: cassandra_seed_nodes != []
+- set_fact:
+    cassandra_data_ips: "{{cassandra_data_ips | default([data_addr])}}"
 # download the Cassandra distribution from the input URL
 - name: Download cassandra distribution to /tmp
   become: true
@@ -58,6 +60,11 @@
     - jvm.options
     - cassandra.yaml
     - cassandra-rackdc.properties
+# load the 'local variables file' if one was defined
+- name: Load local variables file (if defined)
+  include_vars:
+    file: "{{local_vars_file}}"
+  when: not (local_vars_file is undefined or local_vars_file is none or local_vars_file | trim == '')
 # create the new configuration files
 - name: Copy new configuration files
   become: true

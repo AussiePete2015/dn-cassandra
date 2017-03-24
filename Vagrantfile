@@ -103,6 +103,13 @@ optparse = OptionParser.new do |opts|
     options[:yum_repo_url] = yum_repo_url.gsub(/^=/,'')
   end
 
+  options[:local_vars_file] = nil
+  opts.on( '-f', '--local-vars-file FILE', 'Local variables file' ) do |local_vars_file|
+    # while parsing, trim an '=' prefix character off the front of the string if it exists
+    # (would occur if the value was passed using an option flag like '-f=/tmp/local-vars-file.yml')
+    options[:local_vars_file] = local_vars_file.gsub(/^=/,'')
+  end
+
   options[:reset_proxy_settings] = false
   opts.on( '-p', '--clear-proxy-settings', 'Clear existing proxy settings if no proxy is set' ) do |reset_proxy_settings|
     options[:reset_proxy_settings] = true
@@ -147,6 +154,12 @@ end
 if options[:yum_repo_url] && !(options[:yum_repo_url] =~ URI::regexp)
   print "ERROR; input yum repository URL '#{options[:yum_repo_url]}' is not a valid URL\n"
   exit 6
+end
+
+# if a local variables file was passed in, check and make sure it's a valid filename
+if options[:local_vars_file] && !File.file?(options[:local_vars_file])
+  print "ERROR; input local variables file '#{options[:local_vars_file]}' is not a local file\n"
+  exit 3
 end
 
 # All Vagrant configuration is done below. The "2" in Vagrant.configure
@@ -297,6 +310,12 @@ Vagrant.configure("2") do |config|
       ansible.extra_vars[:cassandra_cluster_name] = "#{options[:cassandra_cluster_name]}"
     end
 
+    # if defined, set the 'extra_vars[:local_vars_file]' value to the value taht was passed in
+    # on the command-line (eg. "/tmp/local-vars-file.yml")
+    if options[:local_vars_file]
+      ansible.extra_vars[:local_vars_file] = "#{options[:local_vars_file]}"
+    end
+    
     # if defined, set the 'extra_vars[:cassandra_seed_nodes]' value to the value that was passed in on
     # the command-line (eg. "127.0.0.1")
     if options[:cassandra_seed_nodes]
