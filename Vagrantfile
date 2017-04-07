@@ -21,18 +21,116 @@ class OptionParser
   end
 end
 
+# and define a function that we'll use during the provisioning process
+# to reduce code duplication (since we provision clusters in two passes
+# that are essentially identical)
+def setup_ansible_config(ansible, provisioned_nodes, options)
+  # set the limit to 'all' in order to provision all of machines on the
+  # list in a single playbook run
+  ansible.limit = "all"
+  ansible.playbook = "site.yml"
+  ansible.groups = {
+    cassandra: provisioned_nodes
+  }
+  ansible.extra_vars = {
+    proxy_env: {
+      http_proxy: options[:proxy],
+      no_proxy: options[:no_proxy],
+      proxy_username: options[:proxy_username],
+      proxy_password: options[:proxy_password]
+    },
+    host_inventory: provisioned_nodes,
+    reset_proxy_settings: options[:reset_proxy_settings],
+    yum_repo_url: options[:yum_repo_url],
+    cloud: "vagrant",
+    data_iface: "eth1",
+    api_iface: "eth2",
+    cassandra_jvm_heaps_size: "2G",
+    cassandra_swap_mode: "on",
+    start_cassandra: true,
+    cassandra_trickle_fsync: false
+  }
+
+  # if defined, set the 'extra_vars[:cassandra_url]' value to the value that was passed in on
+  # the command-line (eg. "https://10.0.2.2/apache-cassandra-3.10-bin.tar.gz")
+  if options[:cassandra_url]
+    ansible.extra_vars[:cassandra_url] = "#{options[:cassandra_url]}"
+  end
+
+  # if defined, set the 'extra_vars[:cassandra_version]' value to the value that was passed in on
+  # the command-line (eg. "3.10")
+  if options[:cassandra_version]
+    ansible.extra_vars[:cassandra_version] = "#{options[:cassandra_version]}"
+  end
+
+  # if defined, set the 'extra_vars[:cassandra_dir]' value to the value that was passed in on
+  # the command-line (eg. "/opt/apache-cassandra")
+  if options[:cassandra_dir]
+    ansible.extra_vars[:cassandra_dir] = "#{options[:cassandra_dir]}"
+  end
+
+  # if defined, set the 'extra_vars[:cassandra_data_dir]' value to the value that was passed in on
+  # the command-line (eg. "/opt/apache-cassandra")
+  if options[:cassandra_data_dir]
+    ansible.extra_vars[:cassandra_data_dir] = "#{options[:cassandra_data_dir]}"
+  end
+
+  # if defined, set the 'extra_vars[:cassandra_cluster_name]' value to the value that was passed in on
+  # the command-line (eg. "Test Cluster")
+  if options[:cassandra_cluster_name]
+    ansible.extra_vars[:cassandra_cluster_name] = "#{options[:cassandra_cluster_name]}"
+  end
+
+  # if defined, set the 'extra_vars[:local_vars_file]' value to the value taht was passed in
+  # on the command-line (eg. "/tmp/local-vars-file.yml")
+  if options[:local_vars_file]
+    ansible.extra_vars[:local_vars_file] = "#{options[:local_vars_file]}"
+  end
+
+  # if defined, set the 'extra_vars[:cassandra_seed_nodes]' value to the value that was passed in on
+  # the command-line (eg. "127.0.0.1")
+  if options[:cassandra_seed_array].size > 0
+    ansible.extra_vars[:cassandra_seed_nodes] = options[:cassandra_seed_array]
+  end
+
+  # if defined, set the 'extra_vars[:cassandra_trickle_fsync]' to true
+  if options[:cassandra_trickle_fsync]
+    ansible.extra_vars[:cassandra_trickle_fsync] = true
+  end
+
+  # if defined, set the 'extra_vars[:cassandra_listen_comms_method]' value to the value that was passed in on
+  # the command-line (eg. "address: 127.0.0.1")
+  if options[:cassandra_listen_comms_method]
+    ansible.extra_vars[:cassandra_listen_comms_method] = "#{options[:cassandra_listen_comms_method]}"
+  end
+
+  # if defined, set the 'extra_vars[:cassandra_rpc_comms_method]' value to the value that was passed in on
+  # the command-line (eg. "address: 127.0.0.1")
+  if options[:cassandra_rpc_comms_method]
+    ansible.extra_vars[:cassandra_rpc_comms_method] = "#{options[:cassandra_rpc_comms_method]}"
+  end
+end
+
 options = {}
+# vagrant commands that include these commands can be run without specifying
+# any IP addresses
 no_ip_commands = ['version', 'global-status', '--help', '-h']
+# vagrant commands that only work for a single IP address
+single_ip_commands = ['status', 'ssh']
+# vagrant command arguments that indicate we are provisioning a cluster (if multiple
+# nodes are supplied via the `--cassandra-list` flag)
+provisioning_command_args = ['up', 'provision']
+not_provisioning_flag = ['--no-provision']
 
 optparse = OptionParser.new do |opts|
   opts.banner    = "Usage: #{opts.program_name} [options]"
   opts.separator "Options"
 
-  options[:cassandra_addr] = nil
-  opts.on( '-c', '--cassandra-addr IP_ADDR', 'IP address of the Cassandra server' ) do |cassandra_addr|
+  options[:cassandra_list] = nil
+  opts.on( '-c', '--cassandra-list A1,A2[,...]', 'Cassandra address list' ) do |cassandra_list|
     # while parsing, trim an '=' prefix character off the front of the string if it exists
-    # (would occur if the value was passed using an option flag like '-c=192.168.1.1')
-    options[:cassandra_addr] = cassandra_addr.gsub(/^=/,'')
+    # (would occur if the value was passed using an option flag like '-k=192.168.1.1')
+    options[:cassandra_list] = cassandra_list.gsub(/^=/,'')
   end
 
   options[:cassandra_dir] = nil
@@ -83,14 +181,14 @@ optparse = OptionParser.new do |opts|
   end
 
   options[:cassandra_listen_comms_method] = nil
-  opts.on( '-l', '--listen-method METHOD', 'Set the method for the node to listen on; either \"address: IP_ADDRES\" or \"interface: ADAPTOR\"' ) do |cassandra_listen_comms_method|
+  opts.on( '-l', '--listen-method METHOD', 'Set the method for the node to listen on; either "address: IP_ADDRES" or "interface: ADAPTOR"' ) do |cassandra_listen_comms_method|
     # while parsing, trim an '=' prefix character off the front of the string if it exists
     # (would occur if the value was passed using an option flag like '-l=address: 127.0.0.1')
     options[:cassandra_listen_comms_method] = cassandra_listen_comms_method.gsub(/^=/,'')
   end
 
   options[:cassandra_rpc_comms_method] = nil
-  opts.on( '-r', '--rpc-method METHOD', 'Set the RPC method for the node to listen on; either \"address: IP_ADDRES\" or \"interface: ADAPTOR\"' ) do |cassandra_rpc_comms_method|
+  opts.on( '-r', '--rpc-method METHOD', 'Set the RPC method for the node to listen on; either "address: IP_ADDRES" or "interface: ADAPTOR"' ) do |cassandra_rpc_comms_method|
     # while parsing, trim an '=' prefix character off the front of the string if it exists
     # (would occur if the value was passed using an option flag like '-l=address: 127.0.0.1')
     options[:cassandra_rpc_comms_method] = cassandra_rpc_comms_method.gsub(/^=/,'')
@@ -135,15 +233,11 @@ end
 # check remaining arguments to see if the command requires
 # an IP address (or not)
 ip_required = (ARGV & no_ip_commands).empty?
-
-if ip_required && !options[:cassandra_addr]
-  print "ERROR; server IP address must be supplied for vagrant commands\n"
-  print optparse
-  exit 1
-elsif options[:cassandra_addr] && !(options[:cassandra_addr] =~ Resolv::IPv4::Regex)
-  print "ERROR; input server IP address '#{options[:cassandra_addr]}' is not a valid IP address"
-  exit 2
-end
+# check the remaining arguments to see if we're provisioning or not
+provisioning_command = !((ARGV & provisioning_command_args).empty?) && (ARGV & not_provisioning_flag).empty?
+# and to see if multiple IP addresses are supported (or not) for the
+# command being invoked
+single_ip_command = !((ARGV & single_ip_commands).empty?)
 
 if options[:cassandra_url] && !(options[:cassandra_url] =~ URI::regexp)
   print "ERROR; input Cassandra URL '#{options[:cassandra_url]}' is not a valid URL\n"
@@ -162,182 +256,161 @@ if options[:local_vars_file] && !File.file?(options[:local_vars_file])
   exit 3
 end
 
+# if we're provisioning, then the `--cassandra-list` flag must be provided and either contain
+# a single node (for single-node deployments) or multiple nodes in a comma-separated list
+# (for multi-node deployments) that define a valid cassandra cluster
+cassandra_addr_array = []
+cassandra_seed_array = []
+cassandra_non_seed_array = []
+if provisioning_command || ip_required
+  if !options[:cassandra_list]
+    print "ERROR; IP address must be supplied (using the `-c, --cassandra-list` flag) for this vagrant command\n"
+    exit 1
+  else
+    cassandra_addr_array = options[:cassandra_list].split(',').map { |elem| elem.strip }.reject { |elem| elem.empty? }
+    if cassandra_addr_array.size == 1
+      if !(cassandra_addr_array[0] =~ Resolv::IPv4::Regex)
+        print "ERROR; input Cassandra IP address #{cassandra_addr_array[0]} is not a valid IP address\n"
+        exit 2
+      end
+    elsif !single_ip_command
+      # check the input `cassandra_addr_array` to ensure that all of the values passed in are
+      # legal IP addresses
+      not_ip_addr_list = cassandra_addr_array.select { |addr| !(addr =~ Resolv::IPv4::Regex) }
+      if not_ip_addr_list.size > 0
+        # if some of the values are not valid IP addresses, print an error and exit
+        if not_ip_addr_list.size == 1
+          print "ERROR; input Cassandra IP address #{not_ip_addr_list} is not a valid IP address\n"
+          exit 2
+        else
+          print "ERROR; input Cassandra IP addresses #{not_ip_addr_list} are not valid IP addresses\n"
+          exit 2
+        end
+      end
+      # if we're provisioning a cluster, then a list of seed nodes is needed
+      if provisioning_command && cassandra_addr_array.size > 1 && !options[:cassandra_seed_nodes]
+        print "ERROR; List of seed node addresses must be supplied (using the `-s, --seed-nodes` flag) for this vagrant command\n"
+        exit 1
+      elsif provisioning_command
+        cassandra_seed_array = options[:cassandra_seed_nodes].split(',').map { |elem| elem.strip }.reject { |elem| elem.empty? }
+        if cassandra_seed_array.size == 1
+          if !(cassandra_seed_array[0] =~ Resolv::IPv4::Regex)
+            print "ERROR; input Cassandra seed address #{cassandra_seed_array[0]} is not a valid IP address\n"
+            exit 2
+          end
+        else
+          # check the input `cassandra_seed_array` to ensure that all of the values passed in are
+          # legal IP addresses
+          not_ip_addr_list = cassandra_seed_array.select { |addr| !(addr =~ Resolv::IPv4::Regex) }
+          if not_ip_addr_list.size > 0
+            # if some of the values are not valid IP addresses, print an error and exit
+            if not_ip_addr_list.size == 1
+              print "ERROR; input Cassandra seed address #{not_ip_addr_list} is not a valid IP address\n"
+              exit 2
+            else
+              print "ERROR; input Cassandra seed addresses #{not_ip_addr_list} are not valid IP addresses\n"
+              exit 2
+            end
+          end
+        end
+        # make sure that the seed nodes that are passed in are part of the list of cassandra
+        # node addresses that were passed in
+        not_in_cassandra_array = cassandra_seed_array - cassandra_addr_array
+        if not_in_cassandra_array.size == 1
+          print "ERROR; input Cassandra seed address #{not_in_cassandra_array} is not in the list of Cassandra addresses\n"
+          exit 2
+        elsif not_in_cassandra_array.size > 1
+          print "ERROR; input Cassandra seed addresses #{not_in_cassandra_array} are not in the list of Cassandra addresses\n"
+          exit 2
+        end
+        cassandra_non_seed_array = cassandra_addr_array - cassandra_seed_array
+      end
+    end
+  end
+end
+
+# if we get to here and a list of seed nodes wasn't provided, then we're
+# performing a single-node deployment and all of the nodes are "non-seed"
+# nodes for the purposes of the playbook that will deploy Cassandra to
+# that node
+if cassandra_non_seed_array.size == 0
+  cassandra_non_seed_array = cassandra_addr_array
+end
+
+# and set the value for options[:cassandra_seed_array] to the cassandra_seed_array
+# (we will use this value when provisioning our seed and non-seed nodes, below)
+options[:cassandra_seed_array] = cassandra_seed_array
+
 # All Vagrant configuration is done below. The "2" in Vagrant.configure
 # configures the configuration version (we support older styles for
 # backwards compatibility). Please don't change it unless you know what
 # you're doing.
-proxy = ENV['http_proxy'] || ""
-no_proxy = ENV['no_proxy'] || ""
-proxy_username = ENV['proxy_username'] || ""
-proxy_password = ENV['proxy_password'] || ""
-Vagrant.configure("2") do |config|
-  if Vagrant.has_plugin?("vagrant-proxyconf")
-    if $proxy
-      config.proxy.http               = $proxy
-      config.proxy.no_proxy           = "localhost,127.0.0.1"
-      config.vm.box_download_insecure = true
-      config.vm.box_check_update      = false
+if cassandra_addr_array.size > 0
+  Vagrant.configure("2") do |config|
+    options[:proxy] = ENV['http_proxy'] || ""
+    options[:no_proxy] = ENV['no_proxy'] || ""
+    options[:proxy_username] = ENV['proxy_username'] || ""
+    options[:proxy_password] = ENV['proxy_password'] || ""
+    if Vagrant.has_plugin?("vagrant-proxyconf")
+      if options[:proxy] != ""
+        config.proxy.http               = options[:proxy]
+        config.proxy.no_proxy           = "localhost,127.0.0.1"
+        config.vm.box_download_insecure = true
+        config.vm.box_check_update      = false
+      end
+      if options[:no_proxy] != ""
+        config.proxy.no_proxy           = options[:no_proxy]
+      end
+      if options[:proxy_username] != ""
+        config.proxy.proxy_username     = options[:proxy_username]
+      end
+      if options[:proxy_password] != ""
+        config.proxy.proxy_password     = options[:proxy_password]
+      end
     end
-    if $no_proxy
-      config.proxy.no_proxy           = $no_proxy
-    end
-    if $proxy_username
-      config.proxy.proxy_username     = $proxy_username
-    end
-    if $proxy_password
-      config.proxy.proxy_password     = $proxy_password
-    end
-  end
-  # The most common configuration options are documented and commented below.
-  # For a complete reference, please see the online documentation at
-  # https://docs.vagrantup.com.
+        # Every Vagrant development environment requires a box. You can search for
+    # boxes at https://atlas.hashicorp.com/search.
+    config.vm.box = "centos/7"
+    config.vm.box_check_update = false
 
-  # Every Vagrant development environment requires a box. You can search for
-  # boxes at https://atlas.hashicorp.com/search.
-  config.vm.box = "centos/7"
-
-  # Disable automatic box update checking. If you disable this, then
-  # boxes will only be checked for updates when the user runs
-  # `vagrant box outdated`. This is not recommended.
-  # config.vm.box_check_update = false
-
-  # Create a forwarded port mapping which allows access to a specific port
-  # within the machine from a port on the host machine. In the example below,
-  # accessing "localhost:8080" will access port 80 on the guest machine.
-  # config.vm.network "forwarded_port", guest: 80, host: 8080
-
-  # Create a two private networks, which each allow host-only access to the machine
-  # using a specific IP.
-  if options[:cassandra_addr]
-    config.vm.network "private_network", ip: "#{options[:cassandra_addr]}"
-    split_addr = options[:cassandra_addr].split('.')
-    api_addr = (split_addr[0..1] + [(split_addr[2].to_i + 10).to_s] + [split_addr[3]]).join('.')
-    config.vm.network "private_network", ip: api_addr
-  end
-
-  # Create a public network, which generally matched to bridged network.
-  # Bridged networks make the machine appear as another physical device on
-  # your network.
-  # config.vm.network "public_network"
-
-  # Share an additional folder to the guest VM. The first argument is
-  # the path on the host to the actual folder. The second argument is
-  # the path on the guest to mount the folder. And the optional third
-  # argument is a set of non-required options.
-  # config.vm.synced_folder "../data", "/vagrant_data"
-  config.vm.synced_folder ".", "/vagrant"
-
-  # Provider-specific configuration so you can fine-tune various
-  # backing providers for Vagrant. These expose provider-specific options.
-  # Example for VirtualBox:
-  #
-  # config.vm.provider "virtualbox" do |vb|
-  #   # Display the VirtualBox GUI when booting the machine
-  #   vb.gui = true
-  #
-  #   # Customize the amount of memory on the VM:
-  #   vb.memory = "1024"
-  # end
-  #
-  # View the documentation for the provider you are using for more
-  # information on available options.
-
-  config.vm.provider "virtualbox" do |vb|
-    # Customize the amount of memory on the VM:
-    vb.memory = "8192"
-  end
-
-  # Define a Vagrant Push strategy for pushing to Atlas. Other push strategies
-  # such as FTP and Heroku are also available. See the documentation at
-  # https://docs.vagrantup.com/v2/push/atlas.html for more information.
-  # config.push.define "atlas" do |push|
-  #   push.app = "YOUR_ATLAS_USERNAME/YOUR_APPLICATION_NAME"
-  # end
-
-  config.vm.define "#{options[:cassandra_addr]}"
-  cassandra_addr_array = "#{options[:cassandra_addr]}".split(/,\w*/)
-
-  config.vm.provision "ansible" do |ansible|
-    ansible.playbook = "site.yml"
-    ansible.groups = {
-      cassandra: cassandra_addr_array
-    }
-    ansible.extra_vars = {
-      proxy_env: {
-        http_proxy: proxy,
-        no_proxy: no_proxy,
-        proxy_username: proxy_username,
-        proxy_password: proxy_password
-      },
-      host_inventory: cassandra_addr_array,
-      reset_proxy_settings: options[:reset_proxy_settings],
-      yum_repo_url: options[:yum_repo_url],
-      cloud: "vagrant",
-      data_iface: "eth1",
-      api_iface: "eth2",
-      cassandra_jvm_heaps_size: "2G",
-      cassandra_swap_mode: "on",
-      cassandra_trickle_fsync: false
-    }
-
-    # if defined, set the 'extra_vars[:cassandra_url]' value to the value that was passed in on
-    # the command-line (eg. "https://10.0.2.2/apache-cassandra-3.10-bin.tar.gz")
-    if options[:cassandra_url]
-      ansible.extra_vars[:cassandra_url] = "#{options[:cassandra_url]}"
-    end
-
-    # if defined, set the 'extra_vars[:cassandra_version]' value to the value that was passed in on
-    # the command-line (eg. "3.10")
-    if options[:cassandra_version]
-      ansible.extra_vars[:cassandra_version] = "#{options[:cassandra_version]}"
-    end
-
-    # if defined, set the 'extra_vars[:cassandra_dir]' value to the value that was passed in on
-    # the command-line (eg. "/opt/apache-cassandra")
-    if options[:cassandra_dir]
-      ansible.extra_vars[:cassandra_dir] = "#{options[:cassandra_dir]}"
-    end
-
-    # if defined, set the 'extra_vars[:cassandra_data_dir]' value to the value that was passed in on
-    # the command-line (eg. "/opt/apache-cassandra")
-    if options[:cassandra_data_dir]
-      ansible.extra_vars[:cassandra_data_dir] = "#{options[:cassandra_data_dir]}"
-    end
-
-    # if defined, set the 'extra_vars[:cassandra_cluster_name]' value to the value that was passed in on
-    # the command-line (eg. "Test Cluster")
-    if options[:cassandra_cluster_name]
-      ansible.extra_vars[:cassandra_cluster_name] = "#{options[:cassandra_cluster_name]}"
-    end
-
-    # if defined, set the 'extra_vars[:local_vars_file]' value to the value taht was passed in
-    # on the command-line (eg. "/tmp/local-vars-file.yml")
-    if options[:local_vars_file]
-      ansible.extra_vars[:local_vars_file] = "#{options[:local_vars_file]}"
-    end
-    
-    # if defined, set the 'extra_vars[:cassandra_seed_nodes]' value to the value that was passed in on
-    # the command-line (eg. "127.0.0.1")
-    if options[:cassandra_seed_nodes]
-      ansible.extra_vars[:cassandra_seed_nodes] = "#{options[:cassandra_seed_nodes]}"
-    end
-
-    # if defined, set the 'extra_vars[:cassandra_trickle_fsync]' to true
-    if options[:cassandra_trickle_fsync]
-      ansible.extra_vars[:cassandra_trickle_fsync] = true
-    end
-
-    # if defined, set the 'extra_vars[:cassandra_listen_comms_method]' value to the value that was passed in on
-    # the command-line (eg. "address: 127.0.0.1")
-    if options[:cassandra_listen_comms_method]
-      ansible.extra_vars[:cassandra_listen_comms_method] = "#{options[:cassandra_listen_comms_method]}"
-    end
-
-    # if defined, set the 'extra_vars[:cassandra_rpc_comms_method]' value to the value that was passed in on
-    # the command-line (eg. "address: 127.0.0.1")
-    if options[:cassandra_rpc_comms_method]
-      ansible.extra_vars[:cassandra_rpc_comms_method] = "#{options[:cassandra_rpc_comms_method]}"
+    # loop through all of the addresses in the `cassandra_addr_array` and, if we're
+    # creating VMs, create a VM for each machine; if we're just provisioning the
+    # VMs using an ansible playbook, then wait until the last VM in the loop and
+    # trigger the playbook runs for all of the nodes simultaneously using the
+    # `site.yml` playbook
+    cassandra_addr_array.each do |machine_addr|
+      config.vm.define machine_addr do |machine|
+        # Create a two private networks, which each allow host-only access to the machine
+        # using a specific IP.
+        machine.vm.network "private_network", ip: machine_addr
+        split_addr = machine_addr.split('.')
+        api_addr = (split_addr[0..1] + [(split_addr[2].to_i + 10).to_s] + [split_addr[3]]).join('.')
+        machine.vm.network "private_network", ip: api_addr
+        # set the memory for this instance
+        machine.vm.provider "virtualbox" do |vb|
+          # Customize the amount of memory on the VM:
+          vb.memory = "8192"
+       end
+        # if it's the last node in the list if input addresses, then provision
+        # all of the nodes simultaneously (if the `--no-provision` flag was not
+        # set, of course)
+        if machine_addr == cassandra_addr_array[-1]
+          # now, use the playbook in the `site.yml' file to provision our
+          # nodes with Cassandra (and configure them as a cluster if there
+          # is more than one node); this provisioning is done in two stages,
+          # first provision the seed nodes (if any), then the non-seed nodes
+          if cassandra_seed_array.size > 0
+            machine.vm.provision "ansible" do |ansible|
+              setup_ansible_config(ansible, cassandra_seed_array, options)
+            end
+          end
+          if cassandra_non_seed_array.size > 0
+            machine.vm.provision "ansible" do |ansible|
+              setup_ansible_config(ansible, cassandra_non_seed_array, options)
+            end
+          end
+        end
+      end
     end
   end
-
 end
