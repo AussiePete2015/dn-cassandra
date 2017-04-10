@@ -54,37 +54,37 @@ def setup_ansible_config(ansible, provisioned_nodes, options)
   # if defined, set the 'extra_vars[:cassandra_url]' value to the value that was passed in on
   # the command-line (eg. "https://10.0.2.2/apache-cassandra-3.10-bin.tar.gz")
   if options[:cassandra_url]
-    ansible.extra_vars[:cassandra_url] = "#{options[:cassandra_url]}"
+    ansible.extra_vars[:cassandra_url] = options[:cassandra_url]
   end
 
   # if defined, set the 'extra_vars[:cassandra_version]' value to the value that was passed in on
   # the command-line (eg. "3.10")
   if options[:cassandra_version]
-    ansible.extra_vars[:cassandra_version] = "#{options[:cassandra_version]}"
+    ansible.extra_vars[:cassandra_version] = options[:cassandra_version]
   end
 
   # if defined, set the 'extra_vars[:cassandra_dir]' value to the value that was passed in on
   # the command-line (eg. "/opt/apache-cassandra")
   if options[:cassandra_dir]
-    ansible.extra_vars[:cassandra_dir] = "#{options[:cassandra_dir]}"
+    ansible.extra_vars[:cassandra_dir] = options[:cassandra_dir]
   end
 
   # if defined, set the 'extra_vars[:cassandra_data_dir]' value to the value that was passed in on
   # the command-line (eg. "/opt/apache-cassandra")
   if options[:cassandra_data_dir]
-    ansible.extra_vars[:cassandra_data_dir] = "#{options[:cassandra_data_dir]}"
+    ansible.extra_vars[:cassandra_data_dir] = options[:cassandra_data_dir]
   end
 
   # if defined, set the 'extra_vars[:cassandra_cluster_name]' value to the value that was passed in on
   # the command-line (eg. "Test Cluster")
   if options[:cassandra_cluster_name]
-    ansible.extra_vars[:cassandra_cluster_name] = "#{options[:cassandra_cluster_name]}"
+    ansible.extra_vars[:cassandra_cluster_name] = options[:cassandra_cluster_name]
   end
 
-  # if defined, set the 'extra_vars[:local_vars_file]' value to the value taht was passed in
+  # if defined, set the 'extra_vars[:local_vars_file]' value to the value that was passed in
   # on the command-line (eg. "/tmp/local-vars-file.yml")
   if options[:local_vars_file]
-    ansible.extra_vars[:local_vars_file] = "#{options[:local_vars_file]}"
+    ansible.extra_vars[:local_vars_file] = options[:local_vars_file]
   end
 
   # if defined, set the 'extra_vars[:cassandra_seed_nodes]' value to the value that was passed in on
@@ -101,13 +101,13 @@ def setup_ansible_config(ansible, provisioned_nodes, options)
   # if defined, set the 'extra_vars[:cassandra_listen_comms_method]' value to the value that was passed in on
   # the command-line (eg. "address: 127.0.0.1")
   if options[:cassandra_listen_comms_method]
-    ansible.extra_vars[:cassandra_listen_comms_method] = "#{options[:cassandra_listen_comms_method]}"
+    ansible.extra_vars[:cassandra_listen_comms_method] = options[:cassandra_listen_comms_method]
   end
 
   # if defined, set the 'extra_vars[:cassandra_rpc_comms_method]' value to the value that was passed in on
   # the command-line (eg. "address: 127.0.0.1")
   if options[:cassandra_rpc_comms_method]
-    ansible.extra_vars[:cassandra_rpc_comms_method] = "#{options[:cassandra_rpc_comms_method]}"
+    ansible.extra_vars[:cassandra_rpc_comms_method] = options[:cassandra_rpc_comms_method]
   end
 end
 
@@ -389,7 +389,8 @@ if cassandra_addr_array.size > 0
         # set the memory for this instance
         machine.vm.provider "virtualbox" do |vb|
           # Customize the amount of memory on the VM:
-          vb.memory = "8192"
+          # vb.memory = "8192"
+          vb.memory = "1536"
        end
         # if it's the last node in the list if input addresses, then provision
         # all of the nodes simultaneously (if the `--no-provision` flag was not
