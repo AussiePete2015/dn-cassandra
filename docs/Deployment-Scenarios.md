@@ -1,14 +1,16 @@
 # Example deployment scenarios
 
-There are a four basic deployment scenarios that are supported by this playbook. In the first two (shown below) we'll walk through the deployment of Cassandra to a single node and the deployment of a multi-node Cassandra cluster using a static inventory file. The third scenario will show how the same multi-node Cassandra cluster deployment shown in the second scenario could be performed using the dynamic inventory scripts for both AWS and OpenStack instead of a static inventory file. Finally, we'll walk through the process of "growing" an existing cluster by adding nodes to it. This combination of scenarios should show how most of the configuraiton parameters shown above can be used.
+There are a four basic deployment scenarios that are supported by this playbook. In the first two (shown below) we'll walk through the deployment of Cassandra to a single node and the deployment of a multi-node Cassandra cluster using a static inventory file. The third scenario will show how the same multi-node Cassandra cluster deployment shown in the second scenario could be performed using the dynamic inventory scripts for both AWS and OpenStack instead of a static inventory file. Finally, we'll walk through the process of "growing" an existing cluster by adding nodes to it.
 
 ## Scenario #1: deploying Cassandra to a single node
-While this is the simplest of the deployment scenarios that are supported by this playbook, it is more than likely that deployment of Cassandra to a single node is really only only useful for very simple test environments. Even the most basic (default) Cassandra deployments that are typically shown in online examples of how to deploy Cassandra are two-node deployments.  Nevertheless, we will start our discussion with this deployment scenario since it is the simplest. If we want to deploy Cassandra to a single node with the IP address "192.168.34.12", we could simply create a very simple inventory file that looks something like the following:
+While this is the simplest of the deployment scenarios that are supported by this playbook, it is more than likely that deployment of Cassandra to a single node is really only only useful for very simple test environments. Even the most basic (default) Cassandra deployments that are typically shown in online examples of how to deploy Cassandra are two-node deployments.  Nevertheless, we will start our discussion with this deployment scenario since it is the simplest.
+
+If we want to deploy Cassandra to a single node with the IP address "192.168.34.70", we could simply create a very simple inventory file that looks something like the following:
 
 ```bash
 $ cat single-node-inventory
 
-192.168.34.12 ansible_ssh_user='cloud-user' ansible_ssh_private_key_file='keys/test_node_private_key'
+192.168.34.70 ansible_ssh_user='cloud-user' ansible_ssh_private_key_file='keys/test_node_private_key'
 
 $ 
 ```
@@ -16,7 +18,7 @@ $
 Note that in this example inventory file the `ansible_ssh_host` and `ansible_ssh_port` will take their default values since they aren't specified for our host in this very simple static inventory file. Once we've built our static inventory file, we can then deploy Cassandra to our single node by running an `ansible-playbook` command that looks something like this:
 
 ```bash
-$ ansible-playbook -i single-node-inventory -e "{ host_inventory: ['192.168.34.12'] }" site.yml
+$ ansible-playbook -i single-node-inventory -e "{ host_inventory: ['192.168.34.70'] }" site.yml
 ```
 
 This will download the Apache Cassandra distribution file from the default download server defined in the [defaults/main.yml](../defaults/main.yml) file, unpack that gzipped tarfile into the `/opt/apache-cassandra` directory on that host, and install Cassandra on that node and configure that node as a single-node Cassandra "cluster", using the default configuration parameters that are defined in the [vars/cassandra.yml](../vars/cassandra.yml) and [defaults/main.yml](../defaults/main.yml) files.
@@ -57,7 +59,32 @@ $ ansible-playbook -i test-cluster-inventory -e "{ \
       data_iface: eth0, api_iface: eth1, \
       cassandra_url: 'http://192.168.34.254/apache-cassandra/apache-cassandra-3.10-bin.tar.gz', \
       yum_repo_url: 'http://192.168.34.254/centos', \
-      cassandra_data_dir: '/data', start_cassandra: true, cassandra_jvm_heaps_size: 1G \
+      cassandra_data_dir: '/data', start_cassandra: true \
+    }" site.yml
+```
+
+Alternatively, rather than passing all of those arguments in on the command-line as extra variables, we can make use of the *local variables file* support that is built into this playbook and construct a YAML file that looks something like this containing the configuration parameters that are being used for this deployment:
+
+```yaml
+cloud: vagrant
+data_iface: eth0
+api_iface: eth1
+cassandra_seed_nodes:
+    - '192.168.34.72'
+    - '192.168.34.73'
+    - '192.168.34.74'
+cassandra_url: 'http://192.168.34.254/apache-cassandra/apache-cassandra-3.10-bin.tar.gz'
+yum_repo_url: 'http://192.168.34.254/centos'
+cassandra_data_dir: '/data'
+start_cassandra: true
+```
+
+and then we can pass in the *local variables file* as an argument to the `ansible-playbook` command; assuming the YAML file shown above was in the current working directory and was named `test-cluster-deployment-params.yml`, the resulting command would look somethin like this:
+
+```bash
+$ ansible-playbook -i test-cluster-inventory -e "{ \
+      host_inventory: ['192.168.34.72', '192.168.34.73', '192.168.34.74'], \
+      local_vars_file: 'test-cluster-deployment-params.yml' \
     }" site.yml
 ```
 
@@ -77,16 +104,12 @@ UN  192.168.34.74  65.86 KiB  32           64.1%             6746f789-71c0-40c9-
 $
 ```
 
-with our initial set of three seed nodes up and running, we can now run the second `ansible-playbook` command to deploy Cassandra to our non-seed nodes and add them to the existing cluster:
+with our initial set of three seed nodes up and running, we can now run the second `ansible-playbook` command (making use of the same `local_vars_file` we used when deploying the seed nodes, above) to deploy Cassandra to our non-seed nodes and add them to the existing cluster:
 
 ```bash
 $ ansible-playbook -i test-cluster-inventory -e "{ \
       host_inventory: ['192.168.34.75', '192.168.34.76', '192.168.34.77'], \
-      cloud: vagrant, cassandra_seed_nodes: ['192.168.34.72', '192.168.34.73', '192.168.34.74'], \
-      data_iface: eth0, api_iface: eth1, \
-      cassandra_url: 'http://192.168.34.254/apache-cassandra/apache-cassandra-3.10-bin.tar.gz', \
-      yum_repo_url: 'http://192.168.34.254/centos', \
-      cassandra_data_dir: '/data', start_cassandra: true, cassandra_jvm_heaps_size: 1G \
+      local_vars_file: 'test-cluster-deployment-params.yml' \
     }" site.yml
 ```
 
