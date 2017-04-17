@@ -55,8 +55,8 @@ When the two `ansible-playbook` runs are complete, we will have a set of six nod
 ```bash
 $ ansible-playbook -i test-cluster-inventory -e "{ \
       host_inventory: ['192.168.34.72', '192.168.34.73', '192.168.34.74'], \
-      cloud: vagrant, cassandra_seed_nodes: ['192.168.34.72', '192.168.34.73', '192.168.34.74'], \
-      data_iface: eth0, api_iface: eth1, \
+      cassandra_seed_nodes: ['192.168.34.72', '192.168.34.73', '192.168.34.74'], \
+      inventory_type: static, data_iface: eth0, api_iface: eth1, \
       cassandra_url: 'http://192.168.34.254/apache-cassandra/apache-cassandra-3.10-bin.tar.gz', \
       yum_repo_url: 'http://192.168.34.254/centos', \
       cassandra_data_dir: '/data', start_cassandra: true \
@@ -66,7 +66,7 @@ $ ansible-playbook -i test-cluster-inventory -e "{ \
 Alternatively, rather than passing all of those arguments in on the command-line as extra variables, we can make use of the *local variables file* support that is built into this playbook and construct a YAML file that looks something like this containing the configuration parameters that are being used for this deployment:
 
 ```yaml
-cloud: vagrant
+inventory_type: static
 data_iface: eth0
 api_iface: eth1
 cassandra_seed_nodes:
@@ -167,7 +167,7 @@ and the non-seed nodes have been assigned the same set of `Tenant`, `Project`, `
 $ ansible-playbook -i common-utils/inventory/osp/openstack -e "{ \
         host_inventory: 'meta-Application_cassandra:&meta-Cloud_osp:&meta-Tenant_labs:&meta-Project_projectx:&meta-Domain_preprod', \
         skip_nodes_list: ['10.0.1.15', '10.0.1.16', '10.0.1.17'], \
-        application: cassandra, cloud: osp, tenant: labs, project: projectx, domain: preprod, \
+        application: cassandra, cloud: osp, tenant: labs, project: projectx, domain: preprod, inventory_type: dynamic, \
         ansible_user: cloud-user, private_key_path: './keys', data_iface: eth0, api_iface: eth1, \
         cassandra_data_dir: '/data', start_cassandra: true \
     }" site.yml
@@ -178,7 +178,7 @@ once that playbook run was complete, you could simply re-run the same command (w
 ```bash
 $ ansible-playbook -i common-utils/inventory/osp/openstack -e "{ \
         host_inventory: 'meta-Application_cassandra:&meta-Cloud_osp:&meta-Tenant_labs:&meta-Project_projectx:&meta-Domain_preprod', \
-        application: cassandra, cloud: osp, tenant: labs, project: projectx, domain: preprod, \
+        application: cassandra, cloud: osp, tenant: labs, project: projectx, domain: preprod, inventory_type: dynamic, \
         ansible_user: cloud-user, private_key_path: './keys', data_iface: eth0, api_iface: eth1, \
         cassandra_data_dir: '/data', start_cassandra: true \
     }" site.yml
@@ -190,7 +190,7 @@ In an AWS environment, the commands look quite similar; the command used for the
 $ ansible-playbook -i common-utils/inventory/aws/ec2 -e "{ \
         host_inventory: 'tag_Application_cassandra:&tag_Cloud_aws:&tag_Tenant_labs:&tag_Project_projectx:&tag_Domain_preprod', \
         skip_nodes_list: ['10.10.0.15', '10.10.0.15', '10.10.0.15'], \
-        application: cassandra, cloud: aws, tenant: labs, project: projectx, domain: preprod, \
+        application: cassandra, cloud: aws, tenant: labs, project: projectx, domain: preprod, inventory_type: dynamic, \
         ansible_user: cloud-user, private_key_path: './keys', data_iface: eth0, api_iface: eth1, \
         cassandra_data_dir: '/data', start_cassandra: true \
     }" site.yml
@@ -201,7 +201,7 @@ while the command used for the second pass (provisioning the non-seed nodes) wou
 ```bash
 $ ansible-playbook -i common-utils/inventory/aws/ec2 -e "{ \
         host_inventory: 'tag_Application_cassandra:&tag_Cloud_aws:&tag_Tenant_labs:&tag_Project_projectx:&tag_Domain_preprod', \
-        application: cassandra, cloud: aws, tenant: labs, project: projectx, domain: preprod, \
+        application: cassandra, cloud: aws, tenant: labs, project: projectx, domain: preprod, inventory_type: dynamic, \
         ansible_user: cloud-user, private_key_path: './keys', data_iface: eth0, api_iface: eth1, \
         cassandra_data_dir: '/data', start_cassandra: true \
     }" site.yml
@@ -230,8 +230,8 @@ To provide a couple of examples of how this process of growing a cluster works, 
 ```bash
 $ ansible-playbook -i test-cluster-inventory -e "{ \
       host_inventory: ['192.168.34.78', '192.168.34.79', '192.168.34.80'], \
-      cloud: vagrant, cassandra_seed_nodes: ['192.168.34.72', '192.168.34.73', '192.168.34.74'], \
-      data_iface: eth0, api_iface: eth1, \
+      cassandra_seed_nodes: ['192.168.34.72', '192.168.34.73', '192.168.34.74'], \
+      inventory_type: static, data_iface: eth0, api_iface: eth1, \
       cassandra_url: 'http://192.168.34.254/apache-cassandra/apache-cassandra-3.10-bin.tar.gz', \
       yum_repo_url: 'http://192.168.34.254/centos', cassandra_data_dir: '/data', \
       auto_bootstrap: true, start_cassandra: false, cassandra_jvm_heaps_size: 1G \
@@ -246,7 +246,7 @@ As an example of the dynamic inventory use case, this command could be used to a
 $ ansible-playbook -i common-utils/inventory/osp/openstack -e "{ \
         host_inventory: 'meta-Application_cassandra:&meta-Cloud_osp:&meta-Tenant_labs:&meta-Project_projectx:&meta-Domain_preprod', \
         skip_nodes_list: ['10.0.1.15', '10.0.1.16', '10.0.1.17'], \
-        application: cassandra, cloud: osp, tenant: labs, project: projectx, domain: preprod, \
+        application: cassandra, cloud: osp, tenant: labs, project: projectx, domain: preprod, inventory_type: dynamic, \
         ansible_user: cloud-user, private_key_path: './keys', data_iface: eth0, api_iface: eth1, \
         cassandra_data_dir: '/data', auto_bootstrap: true, start_cassandra: false \
     }" site.yml

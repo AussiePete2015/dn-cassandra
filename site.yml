@@ -18,14 +18,14 @@
         host_group_list:
           - { name: cassandra, role: seed, invert_match: true }
           - { name: cassandra, role: seed }
-      when: cloud == 'aws' or cloud == 'osp'
+      when: inventory_type == 'dynamic'
     - include_role:
         name: build-app-host-groups
       vars:
         host_group_list:
           - { name: cassandra, node_list: "{{host_inventory}}" }
           - { name: cassandra_seed, node_list: "{{cassandra_seed_nodes | default([])}}" }
-      when: cloud == "vagrant"
+      when: inventory_type == 'static'
     - set_fact:
         cassandra_nodes: "{{cassandra_nodes | difference(groups['cassandra_skip'] | default([]))}}"
       when: (groups['cassandra_skip'] | default([])) != []
@@ -41,7 +41,7 @@
   tasks:
       - add_host:
           name: "{{item}}"
-          groups: cassandra
+          groups: cassandra,cassandra_nodes
         with_items: "{{groups['cassandra_seed']}}"
         when: seed_nodes_only is defined and seed_nodes_only
 
@@ -56,7 +56,7 @@
 # Then, deploy Cassandra to the nodes in the cassandra host group that was passed in (if there
 # is more than one node passed in, those nodes will be configured as a single Cassandra cluster)
 - name: Install/configure servers (cassandra)
-  hosts: cassandra
+  hosts: cassandra:&cassandra_nodes
   gather_facts: no
   vars_files:
     - vars/cassandra.yml
