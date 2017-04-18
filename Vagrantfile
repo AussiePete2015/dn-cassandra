@@ -42,7 +42,7 @@ def setup_ansible_config(ansible, provisioned_nodes, options)
     host_inventory: provisioned_nodes,
     reset_proxy_settings: options[:reset_proxy_settings],
     yum_repo_url: options[:yum_repo_url],
-    cloud: "vagrant",
+    inventory_type: "static",
     data_iface: "eth1",
     api_iface: "eth2",
     cassandra_jvm_heaps_size: "2G",
