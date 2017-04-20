@@ -49,6 +49,10 @@ cassandra_truststore_dir: "{{ cassandra_dir }}/conf/.truststore"
 api_iface: "eth0"
 data_iface: "eth0"
 
+# used to install cassandra from a local gzipped tarfile uploaded from the
+# Ansible host (if it exists and is not an empty string)
+local_cassandra_file: ""
+
 # path used to access private keys (defaults to the current working directory)
 private_key_path: "."
 
