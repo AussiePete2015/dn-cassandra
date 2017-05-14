@@ -23,96 +23,32 @@
         name: build-app-host-groups
       vars:
         host_group_list:
-          - { name: cassandra, node_list: "{{host_inventory}}" }
+          - { name: cassandra, node_list: "{{host_inventory | difference(cassandra_seed_nodes | default([]))}}" }
           - { name: cassandra_seed, node_list: "{{cassandra_seed_nodes | default([])}}" }
       when: inventory_type == 'static'
     - set_fact:
         cassandra_nodes: "{{cassandra_nodes | difference(groups['cassandra_skip'] | default([]))}}"
       when: (groups['cassandra_skip'] | default([])) != []
-    - set_fact:
-        seed_nodes_only: true
-        cassandra_nodes: "{{cassandra_seed_nodes}}"
-      when: (groups['cassandra'] | default([])) == []
 
-# Build a cassandra group from the cassandra_seed host group if no non-seed nodes were found
-- name: Build cassandra host group if no non-seed nodes were found
-  hosts: cassandra_seed
+# Then, deploy Cassandra to the nodes in the cassandra_seed host group
+- name: Install/configure servers (seed nodes)
+  hosts: cassandra_seed:&cassandra_seed_nodes
   gather_facts: no
+  vars_files:
+    - vars/cassandra.yml
+  vars:
+    - combined_package_list: "{{ (default_packages|default([])) | union(cassandra_package_list) | union((install_packages_by_tag|default({})).cassandra|default([])) }}"
   tasks:
-      - add_host:
-          name: "{{item}}"
-          groups: cassandra,cassandra_nodes
-        with_items: "{{groups['cassandra_seed']}}"
-        when: seed_nodes_only is defined and seed_nodes_only
+    - include: provisioning-tasks.yml static=no
 
-# Gather facts for the cassandra seed nodes if a set of non-seed nodes were found
-- name: Gather facts for cassandra seed nodes if there are non-seed nodes
-  hosts: cassandra_seed
-  gather_facts: no
-  tasks:
-    - setup:
-      when: seed_nodes_only is undefined or not (seed_nodes_only)
-
-# Then, deploy Cassandra to the nodes in the cassandra host group that was passed in (if there
-# is more than one node passed in, those nodes will be configured as a single Cassandra cluster)
-- name: Install/configure servers (cassandra)
+# Once the seed nodes have been deployed, repeat the same process to deploy Cassandra to the non-seed
+# nodes (configuring them to talk with the seed nodes)
+- name: Install/configure servers (non-seed nodes)
   hosts: cassandra:&cassandra_nodes
   gather_facts: no
   vars_files:
     - vars/cassandra.yml
   vars:
     - combined_package_list: "{{ (default_packages|default([])) | union(cassandra_package_list) | union((install_packages_by_tag|default({})).cassandra|default([])) }}"
-  pre_tasks:
-    # first, load the local variables file (if one was defined); this will initialize
-    # the variables used in our playbook (and override any values in the 'vars/cassandra.yml'
-    # file with redefined values from the 'local_vars_file', if any)
-    - name: Load local variables file (if defined)
-      include_vars:
-        file: "{{local_vars_file}}"
-      when: not (local_vars_file is undefined or local_vars_file is none or local_vars_file | trim == '')
-    # then, restart the network (unless the skip_network_restart was set)
-    # and gather some facts about our Cassandra node(s)
-    - name: Ensure the network interfaces are up on our Cassandra node(s)
-      service:
-        name: network
-        state: restarted
-      become: true
-      when: not (skip_network_restart is defined or skip_network_restart)
-    - name: Gather facts from the Cassandra node(s)
-      setup:
-    # next, we obtain the interface names for our data_iface
-    # and api_iface (provided an interface description was provided for each)
-    - include_role:
-        name: get-iface-names
-      vars:
-        iface_descriptions: "{{iface_description_array}}"
-      when: not (iface_description_array is undefined or iface_description_array == [])
-    # if we're provisioning a RHEL machine, then we need to ensure that
-    # it's subscribed before we can install anything (if it hasn't been
-    # registered already, of course, if that's the case then we can skip
-    # this step)
-    - block:
-      - redhat_subscription:
-          state: present
-          username: "{{rhel_username}}"
-          password: "{{rhel_password}}"
-          consumer_id: "{{rhel_consumer_id}}"
-        become: true
-        when: rhel_username is defined and rhel_password is defined and rhel_consumer_id is defined
-      when: ansible_distribution == 'RedHat'
-  # Now that we have all of the facts we need, we can run the roles that are used to
-  # deploy and configure Cassandra
-  roles:
-    - role: get-iface-addr
-      iface_name: "{{data_iface}}"
-      as_fact: "data_addr"
-    - role: get-iface-addr
-      iface_name: "{{api_iface}}"
-      as_fact: "api_addr"
-    - role: setup-web-proxy
-    - role: add-local-repository
-      yum_repository: "{{yum_repo_url}}"
-      when: yum_repo_url is defined
-    - role: install-packages
-      package_list: "{{combined_package_list}}"
-    - role: dn-cassandra
+  tasks:
+    - include: provisioning-tasks.yml static=no
