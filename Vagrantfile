@@ -247,10 +247,6 @@ if cassandra_non_seed_array.size == 0
   cassandra_non_seed_array = cassandra_addr_array
 end
 
-# and set the value for options[:cassandra_seed_array] to the cassandra_seed_array
-# (we will use this value when provisioning our seed and non-seed nodes, below)
-options[:cassandra_seed_array] = cassandra_seed_array
-
 # All Vagrant configuration is done below. The "2" in Vagrant.configure
 # configures the configuration version (we support older styles for
 # backwards compatibility). Please don't change it unless you know what
@@ -314,7 +310,8 @@ if cassandra_addr_array.size > 0
             ansible.limit = "all"
             ansible.playbook = "site.yml"
             ansible.groups = {
-              cassandra: cassandra_addr_array
+              cassandra_seed: cassandra_seed_nodes
+              cassandra: cassandra_non_seed_array
             }
             # then set some extra variables
             ansible.extra_vars = {
@@ -374,8 +371,8 @@ if cassandra_addr_array.size > 0
 
             # if defined, set the 'extra_vars[:cassandra_seed_nodes]' value to the value that was passed in on
             # the command-line (eg. "127.0.0.1")
-            if options[:cassandra_seed_array].size > 0
-              ansible.extra_vars[:cassandra_seed_nodes] = options[:cassandra_seed_array]
+            if cassandra_seed_array.size > 0
+              ansible.extra_vars[:cassandra_seed_nodes] = cassandra_seed_array
             end
 
             # if defined, set the 'extra_vars[:cassandra_trickle_fsync]' to true
