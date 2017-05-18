@@ -283,9 +283,11 @@ if cassandra_addr_array.size > 0
     # creating VMs, create a VM for each machine; if we're just provisioning the
     # VMs using an ansible playbook, then wait until the last VM in the loop and
     # trigger the playbook runs for all of the nodes simultaneously using the
-    # `site.yml` playbook
+    # `provision-cassandra.yml` playbook
     cassandra_addr_array.each do |machine_addr|
       config.vm.define machine_addr do |machine|
+        # disable the default synced folder
+        machine.vm.synced_folder ".", "/vagrant", disabled: true
         # Create a two private networks, which each allow host-only access to the machine
         # using a specific IP.
         machine.vm.network "private_network", ip: machine_addr
@@ -303,14 +305,15 @@ if cassandra_addr_array.size > 0
         # set, of course)
         if machine_addr == cassandra_addr_array[-1]
           machine.vm.provision "ansible" do |ansible|
-            # now, use the playbook in the `site.yml' file to provision our
-            # nodes with Cassandra (and configure them as a cluster if there
-            # is more than one node); first, set the limit to 'all' in order
-            # to provision all of machines on the list in a single playbook run
+            # now, use the playbook in the `provision-cassandra.yml' file to
+            # provision our nodes with Cassandra (and configure them as a
+            # cluster if there is more than one node); first, set the limit to
+            # 'all' in order to provision all of machines on the list in a
+            # single playbook run
             ansible.limit = "all"
-            ansible.playbook = "site.yml"
+            ansible.playbook = "provision-cassandra.yml"
             ansible.groups = {
-              cassandra_seed: cassandra_seed_nodes
+              cassandra_seed: cassandra_seed_array,
               cassandra: cassandra_non_seed_array
             }
             # then set some extra variables
@@ -321,10 +324,6 @@ if cassandra_addr_array.size > 0
                 proxy_username: options[:proxy_username],
                 proxy_password: options[:proxy_password]
               },
-              host_inventory: cassandra_addr_array,
-              reset_proxy_settings: options[:reset_proxy_settings],
-              yum_repo_url: options[:yum_repo_url],
-              inventory_type: "static",
               data_iface: "eth1",
               api_iface: "eth2",
               cassandra_jvm_heaps_size: "1G",
@@ -332,6 +331,18 @@ if cassandra_addr_array.size > 0
               start_cassandra: true,
               cassandra_trickle_fsync: false
             }
+
+            # if a local yum repositiory  was set, then set an extra variable
+            # containing the named repository
+            if options[:yum_repo_url]
+              ansible.extra_vars[:yum_repo_url] = options[:yum_repo_url]
+            end
+
+            # if the flag to reset the proxy settings was set, then set an extra variable
+            # containing that value
+            if options[:reset_proxy_settings]
+              ansible.extra_vars[:reset_proxy_settings] = options[:reset_proxy_settings]
+            end
 
             # if defined, set the 'extra_vars[:cassandra_url]' value to the value that was passed in on
             # the command-line (eg. "https://10.0.2.2/apache-cassandra-3.10-bin.tar.gz")

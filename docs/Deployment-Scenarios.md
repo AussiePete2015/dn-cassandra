@@ -21,7 +21,7 @@ $
 Note that in this example inventory file the `ansible_ssh_host` and `ansible_ssh_port` will take their default values since they aren't specified for our host in this very simple static inventory file. Once we've built our static inventory file, we can then deploy Cassandra to our single node by running an `ansible-playbook` command that looks something like this:
 
 ```bash
-$ ansible-playbook -i single-node-inventory site.yml
+$ ansible-playbook -i single-node-inventory provision-cassandra.yml
 ```
 
 This will download the Apache Cassandra distribution file from the default download server defined in the [defaults/main.yml](../defaults/main.yml) file, unpack that gzipped tarfile into the `/opt/apache-cassandra` directory on that host, and install Cassandra on that node and configure that node as a single-node Cassandra "cluster", using the default configuration parameters that are defined in the [vars/cassandra.yml](../vars/cassandra.yml) and [defaults/main.yml](../defaults/main.yml) files.
@@ -45,7 +45,7 @@ $ cat test-cluster-inventory
 192.168.34.79 ansible_ssh_host=192.168.34.79 ansible_ssh_port=22 ansible_ssh_user='cloud-user' ansible_ssh_private_key_file='keys/test_cluster_private_key'
 192.168.34.80 ansible_ssh_host=192.168.34.80 ansible_ssh_port=22 ansible_ssh_user='cloud-user' ansible_ssh_private_key_file='keys/test_cluster_private_key'
 
-[cassandra-seed]
+[cassandra_seed]
 192.168.34.72
 192.168.34.73
 192.168.34.74
@@ -58,9 +58,9 @@ $ cat test-cluster-inventory
 $
 ```
 
-Note that in this case, the host groups needed for the playbook run (the `cassandra-seed` and `cassandra` host groups) are actually defined (init-file style) at the bottom of the static inventory file. If a static inventory file is used with the playbooks in this repository, we assume that this will always be the case (there is no attempt made to modify the host groups defined in a static inventory file that is passed into the playbook).
+Note that in this case, the host groups needed for the playbook run (the `cassandra_seed` and `cassandra` host groups) are actually defined (init-file style) at the bottom of the static inventory file. If a static inventory file is used with the playbooks in this repository, we assume that this will always be the case (there is no attempt made to modify the host groups defined in a static inventory file that is passed into the playbook).
 
-The playbook defined in the [site.yml](../site.yml) file in this repository will deploy Cassandra to to all of the hosts in the clsuter defined in the static inventory file shown above in a single `ansible-playbook` run, but the deployment is actually broken up into two separate plays:
+The playbook defined in the [provision-cassandra.yml](../provision-cassandra.yml) file in this repository will deploy Cassandra to to all of the hosts in the clsuter defined in the static inventory file shown above in a single `ansible-playbook` run, but the deployment is actually broken up into two separate plays:
 
 * In the first play in the playbook, Cassandra is deployed to the three seed nodes and those nodes are configured to work with each other as part a cluster
 * In the second play in the playbook, Cassandra is deployed to the three non-seed nodes, and those nodes are configured to talk to the seed nodes in order to join the cluster
@@ -73,7 +73,7 @@ $ ansible-playbook -i test-cluster-inventory -e "{ \
       cassandra_url: 'http://192.168.34.254/apache-cassandra/apache-cassandra-3.10-bin.tar.gz', \
       yum_repo_url: 'http://192.168.34.254/centos', \
       cassandra_data_dir: '/data', start_cassandra: true \
-    }" site.yml
+    }" provision-cassandra.yml
 ```
 
 Alternatively, rather than passing all of those arguments in on the command-line as extra variables, we can make use of the *local variables file* support that is built into this playbook and construct a YAML file that looks something like this containing the configuration parameters that are being used for this deployment:
@@ -92,8 +92,19 @@ and then we can pass in the *local variables file* as an argument to the `ansibl
 $ ansible-playbook -i test-cluster-inventory -e "{ \
       local_vars_file: 'test-cluster-deployment-params.yml', \
       start_cassandra: true \
-    }" site.yml
+    }" provision-cassandra.yml
 ```
+
+As an aside, it should be noted here that the [provision-cassandra.yml](../provision-cassandra.yml) playbook includes a [shebang](https://en.wikipedia.org/wiki/Shebang_(Unix)) line at the beginning of the playbook file. As such, the playbook can be executed directly as a shell script (rather than using the file as the final input to an `ansible-playbook` command). This means that the command that was shown above could also be run as:
+
+```bash
+$ ./provision-cassandra.yml -i test-cluster-inventory -e "{ \
+      local_vars_file: 'test-cluster-deployment-params.yml', \
+      start_cassandra: true \
+    }"
+```
+
+This form is available as a replacement for any of the `ansible-playbook` commands that we show here; which form you use will likely be a matter of personal preference (since both accomplish the same thing).
 
 Once that playbook run is complete, we can SSH into one of our nodes and run the `nodetool` command to view the status of each of the nodes our cluster:
 
@@ -142,7 +153,7 @@ $ ansible-playbook -e "{ \
         tenant: labs, project: projectx, domain: preprod, \
         private_key_path: './keys', data_iface: eth0, api_iface: eth1, \
         cassandra_data_dir: '/data', start_cassandra: true \
-    }" site.yml
+    }" provision-cassandra.yml
 ```
 
 In an AWS environment, the command used would look quite similar:
@@ -153,7 +164,7 @@ $ AWS_PROFILE=datanexus_west ansible-playbook -e "{ \
         tenant: labs, project: projectx, domain: preprod, \
         private_key_path: './keys', data_iface: eth0, api_iface: eth1, \
         cassandra_data_dir: '/data', start_cassandra: true \
-    }" site.yml
+    }" provision-cassandra.yml
 ```
 
 As you can see, these two commands only in terms of the environment variable defined at the beginning of the command-line used to provision to the AWS environment (`AWS_PROFILE=datanexus_west`) and the value defined for the `cloud` variable (`osp` versus `aws`). In both cases the result would be a set of nodes deployed as a Cassandra cluster, with the number of nodes and their roles in the cluster determined (completely) by the tags that were assigned to them.
@@ -180,7 +191,7 @@ As was mentioned, above, it is critical that the same configuration parameters b
 To provide a couple of examples of how this process of growing a cluster works, we would first like to walk through the process of adding three new nodes to the existing Cassandra cluster that was created using the `test-cluster-inventory` (static) inventory file, above. The first step would be to edit the static inventory file and add the three new nodes to the `cassandra` host group, then save the resulting file. The host groups defined in the `test-cluster-inventory` file shown above would look like this after those edits:
 
 ```
-[cassandra-seed]
+[cassandra_seed]
 192.168.34.72
 192.168.34.73
 192.168.34.74
@@ -194,7 +205,7 @@ To provide a couple of examples of how this process of growing a cluster works, 
 192.168.34.80
 ```
 
-(note that we have only shown the tail of that file; the hosts defined at the start of the file would remain the same). With the new static inventofy file in place, the playbook command that we would run to add the three additional nodes to our cluster would look something like this:
+(note that we have only shown the tail of that file; the hosts defined at the start of the file would remain the same). With the new static inventory file in place, the playbook command that we would run to add the three additional nodes to our cluster would look something like this:
 
 ```bash
 $ ansible-playbook -i test-cluster-inventory -e "{ \
@@ -205,7 +216,7 @@ $ ansible-playbook -i test-cluster-inventory -e "{ \
     }" add-nodes.yml
 ```
 
-As you can see, this is essentially the same command we ran previously to add the initial set of three non-seed nodes to our cluster in the static inventory scenario. The only changes to the previous command are that we are using a different playbook (the [add-nodes.yml](../add-nodes.yml) playbook instead of the [site.yml](../site.yml) playbook), the `start_cassandra` variable has been set to `false` (that is the default value, but we often set it here anyway just to ensure that the `cassandra` service won't be set to start at the end of the playbook run because of a value set elsewhere) and the `auto_bootstrap` variable has been set to `true` (so the new nodes that we are adding will explicitly be set to `auto_bootstrap` when they are started).
+As you can see, this is essentially the same command we ran previously to provision our cluster initially in the static inventory scenario. The only changes to the previous command are that we are using a different playbook (the [add-nodes.yml](../add-nodes.yml) playbook instead of the [provision-cassandra.yml](../provision-cassandra.yml) playbook), the `start_cassandra` variable has been set to `false` (that is the default value, but we often set it here anyway just to ensure that the `cassandra` service won't be set to start at the end of the playbook run because of a value set elsewhere) and the `auto_bootstrap` variable has been set to `true` (so the new nodes that we are adding will explicitly be set to `auto_bootstrap` when they are started; again this is the default but we have specified it explicitly here).
 
 To add new nodes to an existing Cassandra cluster in an AWS or OpenStack environment, we would simply create the new nodes we want to add in that environment and tag them appropriately (using the same `Tenant`, `Application`, `Project`, and `Domain` tags that we used when creating our initial cluster). With those new machines tagged appropriately, the command used to add a new set of nodes to an existing cluster in an OpenStack environment would look something like this:
 
@@ -219,8 +230,18 @@ $ ansible-playbook -e "{ \
     }" add-nodes.yml
 ```
 
-The only difference when adding nodes to an AWS environment would be the environment variable that needs to be set at the beginning of the command-line (eg. `AWS_PROFILE=datanexus_west`) and the cloud value that we define within the extra variables that are passed into that `ansible-playbook` command (`aws` instead of `osp`).
+The only difference when adding nodes to an AWS environment would be the environment variable that needs to be set at the beginning of the command-line (eg. `AWS_PROFILE=datanexus_west`) and the cloud value that we define within the extra variables that are passed into that `ansible-playbook` command (`aws` instead of `osp`):
 
-As was the case with the static inventory example shown above, the command shown here for adding new nodes to an existing cluster in an AWS or OpenStack cloud (using tags and dynamic inventory) is essentially the same command that was used when deploying the initial cluster, but we are using a different playbook (the [add-nodes.yml](../add-nodes.yml) playbook instead of the [site.yml](../site.yml) playbook), we have set the `start_cassandra` variable to `false` (so that the `cassandra` service will not start automatically when the playbook run is complete), and we have set the `auto_bootstrap` variable to `true` (so the new nodes we are adding will explicitly be set to `auto_bootstrap` when they are started).
+```bash
+$ AWS_PROFILE=datanexus_west ansible-playbook -e "{ \
+        application: cassandra, cloud: aws, \
+        tenant: labs, project: projectx, domain: preprod, \
+        private_key_path: './keys', data_iface: eth0, api_iface: eth1, \
+        cassandra_data_dir: '/data', \
+        auto_bootstrap: true, start_cassandra: false \
+    }" add-nodes.yml
+```
+
+As was the case with the static inventory example shown above, the command shown here for adding new nodes to an existing cluster in an AWS or OpenStack cloud (using tags and dynamic inventory) is essentially the same command that was used when deploying the initial cluster, but we are using a different playbook (the [add-nodes.yml](../add-nodes.yml) playbook instead of the [provision-cassandra.yml](../provision-cassandra.yml) playbook), we have set the `start_cassandra` variable to `false` (so that the `cassandra` service will not start automatically when the playbook run is complete), and we have set the `auto_bootstrap` variable to `true` (so the new nodes we are adding will explicitly be set to `auto_bootstrap` when they are started).
 
 It should be noted that the playbook associated with this role does not currently support the process of adding new seed nodes to an existing cluster, only the process of adding non-seed nodes. Adding a new seed node (or nodes) involves modifying the `cassandra.yaml` configuration on every node in the cluster in order to add the new seed node (or nodes) to the list of seeds that is defined there. This requires that each node be taken offline, it's configuration modified, then brought back online. That process is hard (at best) to automate, so we have made no effort to do so in the current version of this playbook.

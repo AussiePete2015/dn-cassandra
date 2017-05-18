@@ -2,7 +2,7 @@
 Playbooks/Roles used to deploy Apache Cassandra
 
 # Installation
-To install Cassandra using the [site.yml](site.yml) playbook in this repository, first clone the contents of this repository to a local directory using a command like the following:
+To install Cassandra using the [provision-cassandra.yml](provision-cassandra.yml) playbook in this repository, first clone the contents of this repository to a local directory using a command like the following:
 
 ```bash
 $ git clone --recursive https://github.com/Datanexus/dn-cassandra
@@ -13,7 +13,7 @@ That command will pull down the repository and it's dependencies. Currently this
 The only other requirements for using the playbook in this repository are a relatively recent (v2.x) release of Ansible. The easiest way to obtain a recent relese if Ansible is via a `pip install`, which requires that Python and pip are both installed locally. We have performed all of our testing using a recent (2.7.x) version of Python (Python 2); your mileage may vary if you attempt to run the playbook or the attached dynamic inventory scripts under a newer (v3.x) release of Python (Python 3).
 
 # Using this role to deploy Cassandra
-The [site.yml](site.yml) file at the top-level of this repository supports both single-node Cassandra deployments and the deployment of multi-node Cassandra clusters. The process of deploying Cassandra to these nodes will vary, depending on whether you are managing your inventory dynamically or statically (more on this topic [here](docs/Dynamic-vs-Static-Inventory.md)), whether you are performing a single-node deployment or are deploying a Cassandra cluster, and where you are downloading the packages and dependencies from that are needed to run Cassandra on those nodes.
+The [provision-cassandra.yml](provision-cassandra.yml) file at the top-level of this repository supports both single-node Cassandra deployments and the deployment of multi-node Cassandra clusters. The process of deploying Cassandra to these nodes will vary, depending on whether you are managing your inventory dynamically or statically (more on this topic [here](docs/Dynamic-vs-Static-Inventory.md)), whether you are performing a single-node deployment or are deploying a Cassandra cluster, and where you are downloading the packages and dependencies from that are needed to run Cassandra on those nodes.
 
 We discuss the various deployment scenarios supported by this playbook in [this document](docs/Deployment-Scenarios.md) and discuss how the [Vagrantfile](Vagrantfile) in this repository can be used to deploy Cassandra (both single-node deployments and multi-node clusters are supported) to a set of VMs hosted locally in VirtualBox [here](docs/Deployment-via-Vagrant.md).
 

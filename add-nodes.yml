@@ -1,3 +1,5 @@
+#!/usr/bin/env ansible-playbook
+#
 # (c) 2017 DataNexus Inc.  All Rights Reserved
 ---
 # If we're using dynamic provisioning, then create the `cassandra` and
@@ -55,5 +57,5 @@
         - ("could not be found" not in casssandra_status_out.stderr)
     # then, provision Cassandra to any nodes where the Cassandra service could
     # not be found
-    - include: provision-nodes.yml static=no
+    - include: common-flows/provision-nodes.yml static=no
       when: ("could not be found" in casssandra_status_out.stderr)

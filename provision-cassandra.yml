@@ -1,3 +1,5 @@
+#!/usr/bin/env ansible-playbook
+#
 # (c) 2017 DataNexus Inc.  All Rights Reserved
 ---
 # If we're using dynamic provisioning, then create the `cassandra` and
@@ -33,7 +35,7 @@
     - combined_package_list: "{{ (default_packages|default([])) | union(cassandra_package_list) | union((install_packages_by_tag|default({})).cassandra|default([])) }}"
     - cassandra_seed_nodes: "{{groups['cassandra_seed']}}"
   tasks:
-    - include: provision-nodes.yml static=no
+    - include: common-flows/provision-nodes.yml static=no
 
 # Once the seed nodes have been deployed, repeat the same process to deploy
 # Cassandra to the non-seed nodes (configuring them to talk with the seed
@@ -47,4 +49,4 @@
     - combined_package_list: "{{ (default_packages|default([])) | union(cassandra_package_list) | union((install_packages_by_tag|default({})).cassandra|default([])) }}"
     - cassandra_seed_nodes: "{{groups['cassandra_seed']}}"
   tasks:
-    - include: provision-nodes.yml static=no
+    - include: common-flows/provision-nodes.yml static=no
