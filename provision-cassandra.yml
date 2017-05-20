@@ -1,0 +1,52 @@
+#!/usr/bin/env ansible-playbook
+#
+# (c) 2017 DataNexus Inc.  All Rights Reserved
+---
+# If we're using dynamic provisioning, then create the `cassandra` and
+# `cassandra_seed` host groups
+- name: Create cassandra and cassandra_seed host groups
+  hosts: localhost
+  tasks:
+    # if we're using dynamic provisioning; build the host groups from the
+    # meta-data associated with the matching nodes in the selected cloud
+    - block:
+      # load the 'local variables file', if one was defined, to get any variables
+      # we might need from that file when constructing our host groups
+      - name: Load local variables file
+        include_vars:
+          file: "{{local_vars_file}}"
+        when: not (local_vars_file is undefined or local_vars_file is none or local_vars_file | trim == '')
+      # then, build the seed and non-seed host groups
+      - include_role:
+          name: build-app-host-groups
+        vars:
+          host_group_list:
+            - { name: cassandra, role: seed }
+            - { name: cassandra }
+      when: cloud is defined and (cloud == 'aws' or cloud == 'osp')
+
+# Start by deploying Cassandra to the nodes in the cassandra_seed host group
+- name: Install/configure servers (seed nodes)
+  hosts: cassandra_seed
+  gather_facts: no
+  vars_files:
+    - vars/cassandra.yml
+  vars:
+    - combined_package_list: "{{ (default_packages|default([])) | union(cassandra_package_list) | union((install_packages_by_tag|default({})).cassandra|default([])) }}"
+    - cassandra_seed_nodes: "{{groups['cassandra_seed']}}"
+  tasks:
+    - include: common-flows/provision-nodes.yml static=no
+
+# Once the seed nodes have been deployed, repeat the same process to deploy
+# Cassandra to the non-seed nodes (configuring them to talk with the seed
+# nodes that were deployed, above)
+- name: Install/configure servers (non-seed nodes)
+  hosts: cassandra
+  gather_facts: no
+  vars_files:
+    - vars/cassandra.yml
+  vars:
+    - combined_package_list: "{{ (default_packages|default([])) | union(cassandra_package_list) | union((install_packages_by_tag|default({})).cassandra|default([])) }}"
+    - cassandra_seed_nodes: "{{groups['cassandra_seed']}}"
+  tasks:
+    - include: common-flows/provision-nodes.yml static=no

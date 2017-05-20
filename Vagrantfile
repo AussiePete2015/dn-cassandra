@@ -21,96 +21,6 @@ class OptionParser
   end
 end
 
-# and define a function that we'll use during the provisioning process
-# to reduce code duplication (since we provision clusters in two passes
-# that are essentially identical)
-def setup_ansible_config(ansible, provisioned_nodes, options)
-  # set the limit to 'all' in order to provision all of machines on the
-  # list in a single playbook run
-  ansible.limit = "all"
-  ansible.playbook = "site.yml"
-  ansible.groups = {
-    cassandra: provisioned_nodes
-  }
-  ansible.extra_vars = {
-    proxy_env: {
-      http_proxy: options[:proxy],
-      no_proxy: options[:no_proxy],
-      proxy_username: options[:proxy_username],
-      proxy_password: options[:proxy_password]
-    },
-    host_inventory: provisioned_nodes,
-    reset_proxy_settings: options[:reset_proxy_settings],
-    yum_repo_url: options[:yum_repo_url],
-    inventory_type: "static",
-    data_iface: "eth1",
-    api_iface: "eth2",
-    cassandra_jvm_heaps_size: "2G",
-    cassandra_swap_mode: "on",
-    start_cassandra: true,
-    cassandra_trickle_fsync: false
-  }
-
-  # if defined, set the 'extra_vars[:cassandra_url]' value to the value that was passed in on
-  # the command-line (eg. "https://10.0.2.2/apache-cassandra-3.10-bin.tar.gz")
-  if options[:cassandra_url]
-    ansible.extra_vars[:cassandra_url] = options[:cassandra_url]
-  end
-
-  # if defined, set the 'extra_vars[:cassandra_version]' value to the value that was passed in on
-  # the command-line (eg. "3.10")
-  if options[:cassandra_version]
-    ansible.extra_vars[:cassandra_version] = options[:cassandra_version]
-  end
-
-  # if defined, set the 'extra_vars[:cassandra_dir]' value to the value that was passed in on
-  # the command-line (eg. "/opt/apache-cassandra")
-  if options[:cassandra_dir]
-    ansible.extra_vars[:cassandra_dir] = options[:cassandra_dir]
-  end
-
-  # if defined, set the 'extra_vars[:cassandra_data_dir]' value to the value that was passed in on
-  # the command-line (eg. "/opt/apache-cassandra")
-  if options[:cassandra_data_dir]
-    ansible.extra_vars[:cassandra_data_dir] = options[:cassandra_data_dir]
-  end
-
-  # if defined, set the 'extra_vars[:cassandra_cluster_name]' value to the value that was passed in on
-  # the command-line (eg. "Test Cluster")
-  if options[:cassandra_cluster_name]
-    ansible.extra_vars[:cassandra_cluster_name] = options[:cassandra_cluster_name]
-  end
-
-  # if defined, set the 'extra_vars[:local_vars_file]' value to the value that was passed in
-  # on the command-line (eg. "/tmp/local-vars-file.yml")
-  if options[:local_vars_file]
-    ansible.extra_vars[:local_vars_file] = options[:local_vars_file]
-  end
-
-  # if defined, set the 'extra_vars[:cassandra_seed_nodes]' value to the value that was passed in on
-  # the command-line (eg. "127.0.0.1")
-  if options[:cassandra_seed_array].size > 0
-    ansible.extra_vars[:cassandra_seed_nodes] = options[:cassandra_seed_array]
-  end
-
-  # if defined, set the 'extra_vars[:cassandra_trickle_fsync]' to true
-  if options[:cassandra_trickle_fsync]
-    ansible.extra_vars[:cassandra_trickle_fsync] = true
-  end
-
-  # if defined, set the 'extra_vars[:cassandra_listen_comms_method]' value to the value that was passed in on
-  # the command-line (eg. "address: 127.0.0.1")
-  if options[:cassandra_listen_comms_method]
-    ansible.extra_vars[:cassandra_listen_comms_method] = options[:cassandra_listen_comms_method]
-  end
-
-  # if defined, set the 'extra_vars[:cassandra_rpc_comms_method]' value to the value that was passed in on
-  # the command-line (eg. "address: 127.0.0.1")
-  if options[:cassandra_rpc_comms_method]
-    ansible.extra_vars[:cassandra_rpc_comms_method] = options[:cassandra_rpc_comms_method]
-  end
-end
-
 options = {}
 # vagrant commands that include these commands can be run without specifying
 # any IP addresses
@@ -337,10 +247,6 @@ if cassandra_non_seed_array.size == 0
   cassandra_non_seed_array = cassandra_addr_array
 end
 
-# and set the value for options[:cassandra_seed_array] to the cassandra_seed_array
-# (we will use this value when provisioning our seed and non-seed nodes, below)
-options[:cassandra_seed_array] = cassandra_seed_array
-
 # All Vagrant configuration is done below. The "2" in Vagrant.configure
 # configures the configuration version (we support older styles for
 # backwards compatibility). Please don't change it unless you know what
@@ -377,9 +283,11 @@ if cassandra_addr_array.size > 0
     # creating VMs, create a VM for each machine; if we're just provisioning the
     # VMs using an ansible playbook, then wait until the last VM in the loop and
     # trigger the playbook runs for all of the nodes simultaneously using the
-    # `site.yml` playbook
+    # `provision-cassandra.yml` playbook
     cassandra_addr_array.each do |machine_addr|
       config.vm.define machine_addr do |machine|
+        # disable the default synced folder
+        machine.vm.synced_folder ".", "/vagrant", disabled: true
         # Create a two private networks, which each allow host-only access to the machine
         # using a specific IP.
         machine.vm.network "private_network", ip: machine_addr
@@ -396,18 +304,103 @@ if cassandra_addr_array.size > 0
         # all of the nodes simultaneously (if the `--no-provision` flag was not
         # set, of course)
         if machine_addr == cassandra_addr_array[-1]
-          # now, use the playbook in the `site.yml' file to provision our
-          # nodes with Cassandra (and configure them as a cluster if there
-          # is more than one node); this provisioning is done in two stages,
-          # first provision the seed nodes (if any), then the non-seed nodes
-          if cassandra_seed_array.size > 0
-            machine.vm.provision "ansible" do |ansible|
-              setup_ansible_config(ansible, cassandra_seed_array, options)
+          machine.vm.provision "ansible" do |ansible|
+            # now, use the playbook in the `provision-cassandra.yml' file to
+            # provision our nodes with Cassandra (and configure them as a
+            # cluster if there is more than one node); first, set the limit to
+            # 'all' in order to provision all of machines on the list in a
+            # single playbook run
+            ansible.limit = "all"
+            ansible.playbook = "provision-cassandra.yml"
+            ansible.groups = {
+              cassandra_seed: cassandra_seed_array,
+              cassandra: cassandra_non_seed_array
+            }
+            # then set some extra variables
+            ansible.extra_vars = {
+              proxy_env: {
+                http_proxy: options[:proxy],
+                no_proxy: options[:no_proxy],
+                proxy_username: options[:proxy_username],
+                proxy_password: options[:proxy_password]
+              },
+              data_iface: "eth1",
+              api_iface: "eth2",
+              cassandra_jvm_heaps_size: "1G",
+              cassandra_swap_mode: "on",
+              start_cassandra: true,
+              cassandra_trickle_fsync: false
+            }
+
+            # if a local yum repositiory  was set, then set an extra variable
+            # containing the named repository
+            if options[:yum_repo_url]
+              ansible.extra_vars[:yum_repo_url] = options[:yum_repo_url]
             end
-          end
-          if cassandra_non_seed_array.size > 0
-            machine.vm.provision "ansible" do |ansible|
-              setup_ansible_config(ansible, cassandra_non_seed_array, options)
+
+            # if the flag to reset the proxy settings was set, then set an extra variable
+            # containing that value
+            if options[:reset_proxy_settings]
+              ansible.extra_vars[:reset_proxy_settings] = options[:reset_proxy_settings]
+            end
+
+            # if defined, set the 'extra_vars[:cassandra_url]' value to the value that was passed in on
+            # the command-line (eg. "https://10.0.2.2/apache-cassandra-3.10-bin.tar.gz")
+            if options[:cassandra_url]
+              ansible.extra_vars[:cassandra_url] = options[:cassandra_url]
+            end
+
+            # if defined, set the 'extra_vars[:cassandra_version]' value to the value that was passed in on
+            # the command-line (eg. "3.10")
+            if options[:cassandra_version]
+              ansible.extra_vars[:cassandra_version] = options[:cassandra_version]
+            end
+
+            # if defined, set the 'extra_vars[:cassandra_dir]' value to the value that was passed in on
+            # the command-line (eg. "/opt/apache-cassandra")
+            if options[:cassandra_dir]
+              ansible.extra_vars[:cassandra_dir] = options[:cassandra_dir]
+            end
+
+            # if defined, set the 'extra_vars[:cassandra_data_dir]' value to the value that was passed in on
+            # the command-line (eg. "/opt/apache-cassandra")
+            if options[:cassandra_data_dir]
+              ansible.extra_vars[:cassandra_data_dir] = options[:cassandra_data_dir]
+            end
+
+            # if defined, set the 'extra_vars[:cassandra_cluster_name]' value to the value that was passed in on
+            # the command-line (eg. "Test Cluster")
+            if options[:cassandra_cluster_name]
+              ansible.extra_vars[:cassandra_cluster_name] = options[:cassandra_cluster_name]
+            end
+
+            # if defined, set the 'extra_vars[:local_vars_file]' value to the value that was passed in
+            # on the command-line (eg. "/tmp/local-vars-file.yml")
+            if options[:local_vars_file]
+              ansible.extra_vars[:local_vars_file] = options[:local_vars_file]
+            end
+
+            # if defined, set the 'extra_vars[:cassandra_seed_nodes]' value to the value that was passed in on
+            # the command-line (eg. "127.0.0.1")
+            if cassandra_seed_array.size > 0
+              ansible.extra_vars[:cassandra_seed_nodes] = cassandra_seed_array
+            end
+
+            # if defined, set the 'extra_vars[:cassandra_trickle_fsync]' to true
+            if options[:cassandra_trickle_fsync]
+              ansible.extra_vars[:cassandra_trickle_fsync] = true
+            end
+
+            # if defined, set the 'extra_vars[:cassandra_listen_comms_method]' value to the value that was passed in on
+            # the command-line (eg. "address: 127.0.0.1")
+            if options[:cassandra_listen_comms_method]
+              ansible.extra_vars[:cassandra_listen_comms_method] = options[:cassandra_listen_comms_method]
+            end
+
+            # if defined, set the 'extra_vars[:cassandra_rpc_comms_method]' value to the value that was passed in on
+            # the command-line (eg. "address: 127.0.0.1")
+            if options[:cassandra_rpc_comms_method]
+              ansible.extra_vars[:cassandra_rpc_comms_method] = options[:cassandra_rpc_comms_method]
             end
           end
         end

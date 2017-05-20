@@ -19,7 +19,7 @@ This command will create a six-node Cassandra cluster, where the first three nod
 In terms of how it all works, the [Vagrantfile](../Vagrantfile) is written in such a way that the following sequence of events occurs when the `vagrant ... up` command shown above is run:
 
 1. All of the virtual machines in the cluster (the addresses in the `-c, --cassandra-list`) are created
-1. Cassandra is deployed to the seed nodes (the nodes with addresses in the `-s, --seed-nodes` list) using the Ansible playbook in the [site.yml](../site.yml) file in this repository; the list of seed nodes that was passed in using the `-s, --seed-nodes` flag are used to set the `seeds` configuration parameter in the `cassandra.yaml` file for each of these Cassandra instances
+1. Cassandra is deployed to the seed nodes (the nodes with addresses in the `-s, --seed-nodes` list) using the Ansible playbook in the [provision-cassandra.yml](../provision-cassandra.yml) file in this repository; the list of seed nodes that was passed in using the `-s, --seed-nodes` flag are used to set the `seeds` configuration parameter in the `cassandra.yaml` file for each of these Cassandra instances
 1. The `cassandra` service is started on all of the (seed) nodes that were just provisioned
 1. Cassandra then is deployed to the non-seed nodes using the same Ansible playbook; as was the case in the previous provisioning pass, the list of seed nodes that was passed in using the `-s, --seed-nodes` flag are used to set the `seeds` configuration parameter in the `cassandra.yaml` file for each of these Cassandra instances
 1. Finally, the `cassandra` service is started on all of the (non-seed) nodes that were just provisioned
@@ -62,7 +62,7 @@ UN  192.168.34.77  99.61 KiB  32           29.0%             c4b232bd-e32d-4e64-
 So, to recap, by using a single `vagrant ... up` command we were able to quickly spin up a cluster consisting of of six Cassandra nodes (three seed nodes and three non-seed nodes), and a similar `vagrant ... up` command could be used to build a cluster consisting of any number of seed and non-seed nodes.
 
 ## Separating instance creation from provisioning
-While the `vagrant up` commands that are shown above can be used to easily deploy Cassandra to a single node or to build a Cassandra cluster consisting of multiple nodes, the [Vagrantfile](../Vagrantfile) included in this distribution also supports separating out the creation of the virtual machine from the provisioning of that virtual machine using the Ansible playbook contained in this repository's [site.yml](../site.yml) file.
+While the `vagrant up` commands that are shown above can be used to easily deploy Cassandra to a single node or to build a Cassandra cluster consisting of multiple nodes, the [Vagrantfile](../Vagrantfile) included in this distribution also supports separating out the creation of the virtual machine from the provisioning of that virtual machine using the Ansible playbook contained in this repository's [provision-cassandra.yml](../provision-cassandra.yml) file.
 
 To create a set of virtual machines that we plan on using to build a Cassandra cluster without provisioning Cassandra to those machines, simply run a command similar to the following:
 
@@ -80,7 +80,7 @@ $ vagrant -c="192.168.34.72,192.168.34.73,192.168.34.74,192.168.34.75,192.168.34
     -s="192.168.34.72,192.168.34.73,192.168.34.74" provision
 ```
 
-That command will attach to the named instances and run the playbook in this repository's [site.yml](../site.yml) file on those node (first on the seed nodes, then on the non-seed nodes), resulting in a Cassandra cluster consisting of the nodes that were created in the `vagrant ... up --no-provision` command that was shown, above.
+That command will attach to the named instances and run the playbook in this repository's [provision-cassandra.yml](../provision-cassandra.yml) file on those node (first on the seed nodes, then on the non-seed nodes), resulting in a Cassandra cluster consisting of the nodes that were created in the `vagrant ... up --no-provision` command that was shown, above.
 
 ## Additional vagrant deployment options
 While the commands shown above will install Cassandra with a reasonable, default configuration from a standard location, there are additional command-line parameters that can be used to override the default values that are embedded in the [vars/cassandra.yml](../vars/cassandra.yml) and [defaults/main.yml](../defaults/main.yml) files. Here is a complete list of the command-line flags that can be included in any `vagrant ... up` or `vagrant ... provision` command:
