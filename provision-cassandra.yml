@@ -6,6 +6,7 @@
 # `cassandra_seed` host groups
 - name: Create cassandra and cassandra_seed host groups
   hosts: localhost
+  gather_facts: no
   tasks:
     # if we're using dynamic provisioning; build the host groups from the
     # meta-data associated with the matching nodes in the selected cloud
@@ -34,8 +35,14 @@
   vars:
     - combined_package_list: "{{ (default_packages|default([])) | union(cassandra_package_list) | union((install_packages_by_tag|default({})).cassandra|default([])) }}"
     - cassandra_seed_nodes: "{{groups['cassandra_seed']}}"
-  tasks:
-    - include: common-flows/provision-nodes.yml static=no
+  roles:
+    # first, initialize the play by loading any `local_vars_file` that may have
+    # been passed in, restarting the network on the target nodes (if desired),
+    # and determining the `data_iface` and `api_iface` values from the input
+    # `iface_description_array` (if one was passed in)
+    - role: initialize-play
+    # now that we have all of the facts we need, provision the seed nodes
+    - role: provision-nodes
 
 # Once the seed nodes have been deployed, repeat the same process to deploy
 # Cassandra to the non-seed nodes (configuring them to talk with the seed
@@ -48,5 +55,11 @@
   vars:
     - combined_package_list: "{{ (default_packages|default([])) | union(cassandra_package_list) | union((install_packages_by_tag|default({})).cassandra|default([])) }}"
     - cassandra_seed_nodes: "{{groups['cassandra_seed']}}"
-  tasks:
-    - include: common-flows/provision-nodes.yml static=no
+  roles:
+    # first, initialize the play by loading any `local_vars_file` that may have
+    # been passed in, restarting the network on the target nodes (if desired),
+    # and determining the `data_iface` and `api_iface` values from the input
+    # `iface_description_array` (if one was passed in)
+    - role: initialize-play
+    # now that we have all of the facts we need, provision the non-seed nodes
+    - role: provision-nodes

@@ -6,6 +6,7 @@
 # `cassandra_seed` host groups
 - name: Create cassandra and cassandra_seed host groups
   hosts: localhost
+  gather_facts: no
   tasks:
     # if we're using dynamic provisioning; build the host groups from the
     # meta-data associated with the matching nodes in the selected cloud
@@ -29,33 +30,24 @@
 # first gather the facts for the seed nodes
 - name: Gather facts from seed nodes
   hosts: cassandra_seed
-  vars:
-    - add_nodes: false
   tasks: []
 
 # Then, deploy Cassandra to the new target nodes (those that don't have a
 # cassandra service configured on them already) and configure those nodes to
-# join the existing cluster  
+# join the existing cluster
 - name: Install/configure servers (non-seed nodes)
   hosts: cassandra
   gather_facts: no
   vars_files:
     - vars/cassandra.yml
   vars:
-    - add_nodes: false
     - combined_package_list: "{{ (default_packages|default([])) | union(cassandra_package_list) | union((install_packages_by_tag|default({})).cassandra|default([])) }}"
-  tasks:
-    # first check each node and see which already have a Cassandra service
-    # deployed on them
-    - name: Check for existence of a cassandra service on each node
-      command: "systemctl status cassandra"
-      args:
-        warn: no
-      register: casssandra_status_out
-      failed_when:
-        - casssandra_status_out.rc != 0
-        - ("could not be found" not in casssandra_status_out.stderr)
-    # then, provision Cassandra to any nodes where the Cassandra service could
-    # not be found
-    - include: common-flows/provision-nodes.yml static=no
-      when: ("could not be found" in casssandra_status_out.stderr)
+    - cassandra_seed_nodes: "{{groups['cassandra_seed']}}"
+  roles:
+    # first, initialize the play by loading any `local_vars_file` that may have
+    # been passed in, restarting the network on the target nodes (if desired),
+    # and determining the `data_iface` and `api_iface` values from the input
+    # `iface_description_array` (if one was passed in)
+    - role: initialize-play
+    # and now that we have all of the facts we need, add the new non-seed nodes
+    - role: add-nodes
