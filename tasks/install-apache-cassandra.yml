@@ -25,7 +25,7 @@
       dest: /tmp
       mode: 0644
       validate_certs: no
-    environment: "{{environment_vars}}"
+    environment: "{{environment_vars | default({})}}"
   - set_fact:
       cassandra_filename: "{{cassandra_url | basename}}"
   when: install_from_url is defined and install_from_url
