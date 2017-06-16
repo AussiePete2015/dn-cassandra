@@ -1,0 +1,220 @@
+#!/usr/bin/env ansible-playbook
+# (c) 2016 DataNexus Inc.  All Rights Reserved.
+#
+# overly node-to-node and client-to-node encryption over top of an existing cluster
+---     
+- name: discovering all {{ application }} nodes
+  hosts: localhost
+  tasks:
+    - ec2_remote_facts:
+        region: "{{ ec2_region }}"
+        filters:
+          instance-state-name: running
+          "tag:Application": "{{ application }}"
+          "tag:Domain": "{{ domain }}"
+          "tag:Project": "{{ project }}"
+          "tag:Tenant": "{{ tenant }}"
+      register: cassandra_instances
+      when:
+        - cloud == 'aws'
+
+    - name: building {{ application }} host group
+      add_host: hostname="{{ item }}" groupname="{{ application }}" ansible_ssh_private_key_file="{{ key_path }}/{{ cloud }}-{{ ec2_region }}-{{ project }}-{{ application }}-{{ domain }}-private-key.pem"
+      with_items: "{{ cassandra_instances.instances|map(attribute='private_ip_address')|list }}"
+      when:
+        - cloud == 'aws'
+        - cassandra_instances.instances|length > 0
+
+- name: install JCE packages for {{ application }} encryption
+  hosts: "{{ application }}"
+  vars_files:
+      - vars/{{ application }}.yml
+      - "{{ tenant_config_path }}/config/site.yml"
+  gather_facts: yes
+  roles:
+    - { role: install-packages, package_list: ['epel-release-7-9'], when: ansible_distribution == 'CentOS' or ansible_distribution == 'RedHat' }
+
+- name: overlaying {{ application }} encryption
+  hosts: "{{ application }}"
+  vars_files:
+      - vars/{{ application }}.yml
+      - "{{ tenant_config_path }}/config/site.yml"
+  gather_facts: yes
+  tasks:
+
+    - name: checking existing public/private keystore
+      stat:
+        path: "/etc/pki/datanexus/cassandra/keystore.{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }}"
+      register: cassandra_server_key
+
+    - name: ensure path is present
+      file:
+          path: /etc/pki/datanexus/cassandra
+          state: directory
+          mode: 0755
+          owner: "{{ application }}"
+          group: "{{ application }}"
+      become: true
+      when: not cassandra_server_key.stat.exists
+      
+    - name: generating public/private keypair keystore
+      command: /usr/bin/keytool -genkey -keyalg RSA -alias {{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }} -keystore /etc/pki/datanexus/cassandra/keystore.{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }} -storepass {{ storepass }} -keypass {{ keypass }} -dname "CN={{ certs.CN }}, OU={{ certs.OU }}, O={{ certs.O }}, L={{ certs.L }}, C={{ certs.C }}"
+      become_user: "{{ application }}"
+      become: true
+      when: not cassandra_server_key.stat.exists
+    
+    - name: checking existing public/private keypair
+      stat:
+        path: "/etc/pki/datanexus/cassandra/{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }}.cer"
+      register: cassandra_server_cer
+      
+    - name: exporting public certificate
+      command: /usr/bin/keytool -export -alias {{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }} -file /etc/pki/datanexus/cassandra/{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }}.cer -keystore /etc/pki/datanexus/cassandra/keystore.{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }} -storepass {{ storepass }}
+      become_user: "{{ application }}"
+      become: true
+      when: not cassandra_server_cer.stat.exists
+      
+    - name: importing public certificate into keystore
+      command: /usr/bin/keytool -import -v -trustcacerts -alias {{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }} -file /etc/pki/datanexus/cassandra/{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }}.cer -keystore /etc/pki/datanexus/cassandra/keystore.{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }}
+      become_user: "{{ application }}"
+      become: true
+      
+    - name: checking existing of PKCS keystore
+      stat:
+        path: "/etc/pki/datanexus/cassandra/p12.{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }}"
+      register: cassandra_server_p12
+        
+    - name: creating PKCS keystore from existing keystore
+      command: /usr/bin/keytool -importkeystore -srckeystore /etc/pki/datanexus/cassandra/keystore.{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }} -destkeystore /etc/pki/datanexus/cassandra/p12.{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }} -deststoretype PKCS12 -srcstorepass {{ storepass }} -deststorepass {{ storepass }}
+      become_user: "{{ application }}"
+      become: true
+      when: not cassandra_server_p12.stat.exists
+    
+    - name: checking existing of node certificate PEM
+      stat:
+        path: "/etc/pki/datanexus/cassandra/{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }}.cer.pem"
+      register: cassandra_server_pem
+      
+    - name: extracting CQLSH certificate PEM with no keys
+      command: /usr/bin/openssl pkcs12 -in /etc/pki/datanexus/cassandra/p12.{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }} -nokeys -out /etc/pki/datanexus/cassandra/{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }}.cer.pem -passin pass:{{ keypass }}
+      become_user: "{{ application }}"
+      become: true
+      when: not cassandra_server_pem.stat.exists
+
+    - name: fetching CQLSH certificates from nodes
+      fetch:
+        src: "/etc/pki/datanexus/cassandra/{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }}.cer.pem"
+        dest: "{{ key_path }}/{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }}.cqlsh.pem"
+        flat: yes
+      become: yes
+          
+    - name: checking existence of key PEM
+      stat:
+        path: "/etc/pki/datanexus/cassandra/{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }}.key.pem"
+      register: cassandra_server_pem
+      
+    - name: extracting CQLSH certificate PEM with no certs
+      command: /usr/bin/openssl pkcs12 -in /etc/pki/datanexus/cassandra/p12.{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }} -nodes -nocerts -out /etc/pki/datanexus/cassandra/{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }}.key.pem -passin pass:{{ keypass}}
+      become_user: "{{ application }}"
+      become: true
+      when: not cassandra_server_pem.stat.exists      
+
+    - name: fetching public certificate from nodes
+      fetch:
+        src: "/etc/pki/datanexus/cassandra/{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }}.cer"
+        dest: "{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }}.cer"
+        flat: yes
+      become: yes
+      
+    - local_action:
+        module: find
+        paths: .
+        patterns: "*.cer"
+      register: find_result
+      
+    - name: copying certificates to all cluster nodes
+      copy:
+        src:  "{{ item.path }}"
+        dest: /etc/pki/datanexus/cassandra/
+        owner: "{{ application }}"
+        group: "{{ application }}"
+        mode: 0400
+      become: true
+      with_items: "{{ find_result.files }}"
+    
+    - name: checking existing of node truststore
+      stat:
+        path: "/etc/pki/datanexus/cassandra/truststore.{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }}"
+      become_user: "{{ application }}"
+      become: yes
+      register: cassandra_server_trust
+    
+    - find:
+        paths: /etc/pki/datanexus/cassandra/
+        patterns: "*.cer"
+      become_user: "{{ application }}"
+      become: yes
+      register: find_result
+    
+    - name: making keystore writeable
+      file:
+          path: /etc/pki/datanexus/cassandra/truststore.{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }}
+          state: file
+          mode: 0600
+      become_user: "{{ application }}"
+      become: true
+      when: cassandra_server_trust.stat.exists
+        
+    - name: deleting any existing certs from node truststore
+      command: /usr/bin/keytool -delete -v -alias {{ item.path.split('/')[5].split('.')[0:4] | join('.') }}  -keystore /etc/pki/datanexus/cassandra/truststore.{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }} -noprompt -storepass {{ storepass }}
+      become_user: "{{ application }}"
+      become: true
+      with_items: "{{ find_result.files }}"
+      when: cassandra_server_trust.stat.exists
+    
+    - name: importing certificates into node truststore
+      command: /usr/bin/keytool -import -v -trustcacerts -alias {{ item.path.split('/')[5].split('.')[0:4] | join('.') }} -file {{ item.path }} -keystore /etc/pki/datanexus/cassandra/truststore.{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }} -noprompt -storepass {{ storepass }}
+      become_user: "{{ application }}"
+      become: true
+      with_items: "{{ find_result.files }}"
+      
+    - name: ensuring node truststores are protected
+      file:
+        path: /etc/pki/datanexus/cassandra/truststore.{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }}
+        state: file
+        mode: 0400
+      become_user: "{{ application }}"
+      become: true
+    
+    - replace:
+        path: /opt/apache-cassandra/conf/cassandra.yaml
+        regexp: "{{ item.regexp }}"
+        replace: "{{ item.replace }}"
+      become_user: "{{ application }}"
+      become: true
+      with_items:
+        - { regexp: '    internode_encryption: none', replace: '    internode_encryption: all' }
+        - { regexp: '    keystore: conf/.keystore', replace: '    keystore: /etc/pki/datanexus/cassandra/keystore.{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }}' }
+        - { regexp: '    keystore_password: cassandra', replace: '    keystore_password: {{ storepass }}' }
+        - { regexp: '    truststore: conf/.truststore', replace: '    truststore: /etc/pki/datanexus/cassandra/truststore.{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }}' }
+        - { regexp: '    truststore_password: cassandra', replace: '    truststore_password: {{ storepass }}' } 
+        - { regexp: '    # protocol: TLS', replace: '    protocol: TLS' }
+        - { regexp: '    # algorithm: SunX509', replace: '    algorithm: SunX509' }
+        - { regexp: '    # store_type: JKS', replace: '    store_type: JKS' }
+        - { regexp: '    # cipher_suites: \[TLS_RSA_WITH_AES_128_CBC_SHA,TLS_RSA_WITH_AES_256_CBC_SHA,TLS_DHE_RSA_WITH_AES_128_CBC_SHA,TLS_DHE_RSA_WITH_AES_256_CBC_SHA,TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA\]', replace: '    cipher_suites: [TLS_RSA_WITH_AES_256_CBC_SHA]' }
+       # - { regexp: '    # require_client_auth: false', replace: '    require_client_auth: true' }
+    
+    - replace:
+        path: /opt/apache-cassandra/conf/cassandra.yaml
+        regexp: "{{ item.regexp }}"
+        replace: "{{ item.replace }}"
+      become_user: "{{ application }}"
+      become: true
+      with_items:
+        - { regexp: 'client_encryption_options:\n    enabled: false', replace: 'client_encryption_options:\n    enabled: true' }
+        - { regexp: '    # truststore: conf/.truststore', replace: '    truststore: /etc/pki/datanexus/cassandra/truststore.{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }}' }
+        - { regexp: '    # truststore_password: cassandra', replace: '    truststore_password: {{ storepass }}' }
+            
+    - name: restart cassandra
+      become: yes
+      systemd: "name=cassandra.service state=restarted daemon_reload=yes"
