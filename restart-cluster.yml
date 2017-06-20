@@ -1,0 +1,73 @@
+#!/usr/bin/env ansible-playbook
+#
+# (c) 2017 DataNexus Inc.  All Rights Reserved
+---
+# If we're using dynamic provisioning, then create the `cassandra` and
+# `cassandra_seed` host groups
+- name: Create cassandra and cassandra_seed host groups
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    # if we're using dynamic provisioning; build the host groups from the
+    # meta-data associated with the matching nodes in the selected cloud
+    - block:
+      # load the 'local variables file', if one was defined, to get any variables
+      # we might need from that file when constructing our host groups
+      - name: Load local variables file
+        include_vars:
+          file: "{{local_vars_file}}"
+        when: not (local_vars_file is undefined or local_vars_file is none or local_vars_file | trim == '')
+      # then, build the seed and non-seed host groups
+      - include_role:
+          name: build-app-host-groups
+        vars:
+          host_group_list:
+            - { name: cassandra, role: seed }
+            - { name: cassandra }
+      when: cloud is defined and (cloud == 'aws' or cloud == 'osp')
+
+# Collect facts for nodes in the cluster
+- name: Gather facts from cluster nodes
+  hosts: cassandra_seed:cassandra
+  gather_facts: no
+  vars_files:
+    - vars/cassandra.yml
+  roles:
+    # first, initialize the play by loading any `local_vars_file` that may have
+    # been passed in and determining the `data_iface` and `api_iface` values from
+    # the input `iface_description_array` (if one was passed in)
+    - role: initialize-play
+      skip_network_restart: true
+    # then set a fact for each node containing the `api_addr`
+    - role: get-iface-addr
+      iface_name: "{{api_iface}}"
+      as_fact: "api_addr"
+      when: (api_iface | default('')) != ''
+
+# Then, perform a rolling restart of the Cassandra cluster
+- name: Perform a rolling restart of the cluster, one node at a time
+  hosts: cassandra_seed:cassandra
+  gather_facts: no
+  vars_files:
+    - vars/cassandra.yml
+  vars:
+    - cluster_nodes: "{{groups['cassandra_seed'] + groups['cassandra']}}"
+  pre_tasks:
+    - set_fact:
+        restart_commands:
+          - '{{cassandra_dir}}/bin/nodetool disablethrift'
+          - '{{cassandra_dir}}/bin/nodetool disablebinary'
+          - 'until {{cassandra_dir}}/bin/nodetool info | grep ^Native | awk "{print $(NF)}" | grep -m 1 "false" > /dev/null 2>&1; do sleep 1; done'
+          - '{{cassandra_dir}}/bin/nodetool disablegossip'
+          - 'until {{cassandra_dir}}/bin/nodetool info | grep ^Gossip | awk "{print $(NF)}" | grep -m 1 "false" > /dev/null 2>&1; do sleep 1; done'
+          - '{{cassandra_dir}}/bin/nodetool drain'
+          - 'sleep 30'
+          - 'sudo systemctl restart cassandra'
+          - 'until echo "SELECT * FROM system.peers LIMIT 1;" | {{cassandra_dir}}/bin/cqlsh {{hostvars[inventory_hostname].api_addr}} > /dev/null 2>&1; do sleep 5; done'
+    - set_fact:
+        restart_command: "{{restart_commands | join(' && ')}}"
+  roles:
+    # Perform the rolling restart
+    - role: rolling-restart
+      target_nodes: "{{cluster_nodes}}"
+      restart_command_provided: true
