@@ -1,13 +1,5 @@
 # (c) 2017 DataNexus Inc.  All Rights Reserved
 ---
-- name: Create a cassandra PID dir
-  become: yes
-  file:
-    path: /var/run/cassandra
-    state: directory
-    mode: 0755
-    owner: "{{cassandra_user}}"
-    group: "{{cassandra_group}}"
 - name: Create cassandra service files
   become: true
   template:
